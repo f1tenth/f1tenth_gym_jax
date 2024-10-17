@@ -415,8 +415,23 @@ class Simulator(object):
         Returns:
             None
         """
-        for agent in self.agents:
-            agent.set_map(map)
+        # generate map pixels in world frame (pixel center)
+        map_img = self.track.occupancy_map
+        h, w = map_img.shape
+        reso = self.track.spec.resolution
+        ox = self.track.spec.origin[0]
+        oy = self.track.spec.origin[1]
+        x_ind, y_ind = np.meshgrid(np.arange(w), np.arange(h))
+        pcx = (x_ind * reso + ox + reso / 2).flatten()
+        pcy = (y_ind * reso + oy + reso / 2).flatten()
+        self.pixel_centers = np.vstack((pcx, pcy)).T
+        map_mask = (map_img == 0.0).flatten()
+        self.pixel_centers = self.pixel_centers[map_mask, :]
+
+        # set scan simulator map if scan enabled
+        if self.gen_scan:
+            for agent in self.agents:
+                agent.set_map(map)
 
     def update_params(self, params, agent_idx=-1):
         """
@@ -460,6 +475,28 @@ class Simulator(object):
                 self.params["width"],
             )
         self.collisions, self.collision_idx = collision_multiple(all_vertices)
+
+    def check_map_collision(self):
+        """
+        Checks for collision between agents and map
+        Args:
+            None
+        Returns:
+            None
+        """
+        # get vertices of all agents
+        all_vertices = np.empty((self.num_agents, 4, 2))
+        for i in range(self.num_agents):
+            all_vertices[i, :, :] = get_vertices(
+                np.append(self.agents[i].state[0:2], self.agents[i].state[4]),
+                self.params["length"],
+                self.params["width"],
+            )
+
+        self.collisions = collision_multiple_map(
+            all_vertices,
+            self.pixel_centers,
+        )
 
     def step(self, control_inputs):
         """

@@ -23,22 +23,23 @@ from flax import struct
 # numpy
 import numpy as np
 
-# local
-from .action import CarAction, from_single_to_multi_action_space
-from .integrator import IntegratorType
-from .rendering import make_renderer
-
 from .track import Track
 
 # base classes
 from .base_classes import Simulator, DynamicModel
 from .observation import observation_factory, Observation
 from .reset import make_reset_fn
-from .track import Track
-from .utils import deep_update
 
 # other
 from functools import partial
+
+# dynamics
+from .dynamic_models import vehicle_dynamics_ks, vehicle_dynamics_st
+
+# integrators
+from .integrator import integrate_euler, integrate_rk4
+
+# scanning
 
 
 @struct.dataclass
@@ -61,8 +62,7 @@ class State:
     scans: chex.Array  # [n_agent, n_rays]
 
     # race stuff
-    num_laps: chex.Array # [n_agent, ]
-    
+    num_laps: chex.Array  # [n_agent, ]
 
 
 @struct.dataclass
@@ -92,9 +92,16 @@ class Param:
     width: float = 0.31  # width of the vehicle in meters
     length: float = 0.58  # length of the vehicle in meters
     timestep: float = 0.01  # physical time steps of the dynamics model
+    longitudinal_action_type: str = "acceleration"  # speed or acceleration
+    steering_action_type: str = (
+        "steering_velocity"  # steering_angle or steering_velocity
+    )
     integrator: str = "rk4"  # dynamics integrator
     model: str = "st"  # dynamics model type
-    produce_scans: bool = False # whether to turn on laser scan
+    produce_scans: bool = False  # whether to turn on laser scan
+    observe_others: bool = True  # whether can observe other agents
+    num_rays: float = 1000  # number of rays in each scan
+    map_name: str = "Spielberg"  # map for environment
 
 
 class F110Env(MultiAgentEnv):
@@ -111,55 +118,90 @@ class F110Env(MultiAgentEnv):
 
     def __init__(self, num_agents: int = 1, params: Param = Param(), **kwargs):
         super().__init__()
-
-        # Configuration
-        # self.config = self.default_config()
-        # self.configure(config)
-
-        # self.seed = self.config["seed"]
-        # self.map = self.config["map"]
-        # self.params = self.config["params"]
-        # self.num_agents = self.config["num_agents"]
-        # self.timestep = self.config["timestep"]
-        # self.ego_idx = self.config["ego_idx"]
-        # self.integrator = IntegratorType.from_string(self.config["integrator"])
-        # self.model = DynamicModel.from_string(self.config["model"])
-        # self.observation_config = self.config["observation_config"]
-        # self.action_type = CarAction(self.config["control_input"], params=self.params)
-
-        # radius to consider done
-        # self.start_thresh = 0.5  # 10cm
-
-        # env states
-        # self.poses_x = []
-        # self.poses_y = []
-        # self.poses_theta = []
-        # self.collisions = np.zeros((self.num_agents,))
-
+        # agents
         self.num_agents = num_agents
-
         self.agents = [f"agent_{i}" for i in range(num_agents)]
         self.a_to_i = {a: i for i, a in enumerate(self.agents)}
 
-        # loop completion
-        # self.near_start = True
-        # self.num_toggles = 0
+        # choose dynamics model and integrators
+        if params.integrator == "rk4":
+            self.integrator_func = integrate_rk4
+        elif params.integrator == "euler":
+            self.integrator_func = integrate_euler
+        else:
+            raise (
+                ValueError(
+                    f"Chosen integrator {params.integrator} is invalid. Choose either 'rk4' or 'euler'."
+                )
+            )
 
-        # race info
-        # self.lap_times = np.zeros((self.num_agents,))
-        # self.lap_counts = np.zeros((self.num_agents,))
-        # self.current_time = 0.0
+        if params.model == "st":
+            self.model_func = vehicle_dynamics_st
+            self.observation_spaces = {
+                i: Box(-jnp.inf, jnp.inf, (5,)) for i in self.agents
+            }
+        elif params.model == "ks":
+            self.model_func = vehicle_dynamics_ks
+            self.observation_spaces = {
+                i: Box(-jnp.inf, jnp.inf, (7,)) for i in self.agents
+            }
+        else:
+            raise (
+                ValueError(
+                    f"Chosen dynamics model {params.model} is invalid. Choose either 'st' or 'ks'."
+                )
+            )
 
-        # finish line info
-        # self.num_toggles = 0
-        # self.near_start = True
-        # self.near_starts = np.array([True] * self.num_agents)
-        # self.toggle_list = np.zeros((self.num_agents,))
+        # spaces
+        self.action_spaces = {i: Box(-jnp.inf, jnp.inf, (2,)) for i in self.agents}
+        if params.model == "st":
+            self.state_size = 5
+        elif params.model == "ks":
+            self.state_size = 7
+        else:
+            # shouldn't need to check
+            pass
+
+        # scanning or not
+        if params.produce_scans:
+            self.scan_size = params.num_rays
+        else:
+            self.scan_size = 0
+
+        # observing others
+        if params.observe_others:
+            self.all_other_state_size = self.state_size * (self.num_agents - 1)
+        else:
+            self.all_other_state_size = 0
+
+        self.observation_spaces = {
+            i: Box(
+                -jnp.inf,
+                jnp.inf,
+                (self.state_size + self.all_others_state_size + self.scan_size,),
+            )
+            for i in self.agents
+        }
+        self.observation_space_ind = {
+            "dynamics_state": list(range(self.state_size)),
+            "other_agent_dynamics_state": list(
+                range(self.state_size, self.state_size + self.all_other_state_size)
+            ),
+            "scan": list(
+                range(
+                    self.state_size,
+                    self.state_size + self.all_other_state_size,
+                    self.state_size,
+                    self.state_size + self.all_other_state_size + self.scan_size,
+                )
+            ),
+        }
+
+        # start line info TODO: check if still needed
         self.start_xs = np.zeros((self.num_agents,))
         self.start_ys = np.zeros((self.num_agents,))
         self.start_thetas = np.zeros((self.num_agents,))
         self.start_rot = np.eye(2)
-
         # initiate stuff
         self.sim = Simulator(
             self.params,

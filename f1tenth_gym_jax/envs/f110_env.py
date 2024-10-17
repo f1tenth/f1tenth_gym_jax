@@ -1,34 +1,30 @@
-# MIT License
-
-# Copyright (c) 2020 Joseph Auckley, Matthew O'Kelly, Aman Sinha, Hongrui Zheng
-
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
 """
+Jax jittable f1tenth_gym environment
+
+Based on JaxMARL api which follows PettingZoo/Gymnax
+
 Author: Hongrui Zheng
 """
 
-# gym imports
-import gymnasium as gym
+# typing
+from typing import Any, Dict, Optional, Tuple, Union
 
-from .action import (CarAction,
-                                  from_single_to_multi_action_space)
+from .multi_agent_env import MultiAgentEnv
+from .spaces import Box
+from .spaces import Tuple as JaxMARLTuple
+from .spaces import Dict as JaxMARLDict
+
+# jax
+import jax
+import jax.numpy as jnp
+import chex
+from flax import struct
+
+# numpy
+import numpy as np
+
+# local
+from .action import CarAction, from_single_to_multi_action_space
 from .integrator import IntegratorType
 from .rendering import make_renderer
 
@@ -36,98 +32,129 @@ from .track import Track
 
 # base classes
 from .base_classes import Simulator, DynamicModel
-from .observation import observation_factory
+from .observation import observation_factory, Observation
 from .reset import make_reset_fn
 from .track import Track
 from .utils import deep_update
 
+# other
+from functools import partial
 
-# others
-import numpy as np
 
-
-class F110Env(gym.Env):
+@struct.dataclass
+class State:
     """
-    OpenAI gym environment for F1TENTH
+    Basic Jittable state for cars
+    """
 
-    Env should be initialized by calling gym.make('f110_gym:f110-v0', **kwargs)
+    # gym stuff
+    rewards: chex.Array  # [n_agent, ]
+    done: chex.Array  # [n_agent, ]
+    step: int
+
+    # dynamic states
+    cartesian_states: chex.Array  # [n_agent, [x, y, delta, v, psi, psi_dot, beta]]
+    frenet_states: chex.Array  # [n_agent, [s, ey, epsi]]
+    collisions: chex.Array  # [n_agent, n_agent + 1]
+
+    # laser scans TODO: might not need to be part of the state since doesn't depend on previous
+    scans: chex.Array  # [n_agent, n_rays]
+
+    # race stuff
+    num_laps: chex.Array # [n_agent, ]
+    
+
+
+@struct.dataclass
+class Param:
+    """
+    Default jittable params for dynamics
+    """
+
+    mu: float = 1.0489  # surface friction coefficient
+    C_Sf: float = 4.718  # Cornering stiffness coefficient, front
+    C_Sr: float = 5.4562  # Cornering stiffness coefficient, rear
+    lf: float = 0.15875  # Distance from center of gravity to front axle
+    lr: float = 0.17145  # Distance from center of gravity to rear axle
+    h: float = 0.074  # Height of center of gravity
+    m: float = 3.74  # Total mass of the vehicle
+    I: float = 0.04712  # Moment of inertial of the entire vehicle about the z axis
+    s_min: float = -0.4189  # Minimum steering angle constraint
+    s_max: float = 0.4189  # Maximum steering angle constraint
+    sv_min: float = -3.2  # Minimum steering velocity constraint
+    sv_max: float = 3.2  # Maximum steering velocity constraint
+    v_switch: float = (
+        7.319  # Switching velocity (velocity at which the acceleration is no longer able to #spin)
+    )
+    a_max: float = 9.51  # Maximum longitudinal acceleration
+    v_min: float = -5.0  # Minimum longitudinal velocity
+    v_max: float = 20.0  # Maximum longitudinal velocity
+    width: float = 0.31  # width of the vehicle in meters
+    length: float = 0.58  # length of the vehicle in meters
+    timestep: float = 0.01  # physical time steps of the dynamics model
+    integrator: str = "rk4"  # dynamics integrator
+    model: str = "st"  # dynamics model type
+    produce_scans: bool = False # whether to turn on laser scan
+
+
+class F110Env(MultiAgentEnv):
+    """
+    JAX compatible gym environment for F1TENTH
 
     Args:
         kwargs:
-            seed (int, default=12345): seed for random state and reproducibility
-            map (str, default='vegas'): name of the map used for the environment.
-
-            params (dict, default={'mu': 1.0489, 'C_Sf':, 'C_Sr':, 'lf': 0.15875, 'lr': 0.17145, 'h': 0.074, 'm': 3.74, 'I': 0.04712, 's_min': -0.4189, 's_max': 0.4189, 'sv_min': -3.2, 'sv_max': 3.2, 'v_switch':7.319, 'a_max': 9.51, 'v_min':-5.0, 'v_max': 20.0, 'width': 0.31, 'length': 0.58}): dictionary of vehicle parameters.
-            mu: surface friction coefficient
-            C_Sf: Cornering stiffness coefficient, front
-            C_Sr: Cornering stiffness coefficient, rear
-            lf: Distance from center of gravity to front axle
-            lr: Distance from center of gravity to rear axle
-            h: Height of center of gravity
-            m: Total mass of the vehicle
-            I: Moment of inertial of the entire vehicle about the z axis
-            s_min: Minimum steering angle constraint
-            s_max: Maximum steering angle constraint
-            sv_min: Minimum steering velocity constraint
-            sv_max: Maximum steering velocity constraint
-            v_switch: Switching velocity (velocity at which the acceleration is no longer able to create wheel spin)
-            a_max: Maximum longitudinal acceleration
-            v_min: Minimum longitudinal velocity
-            v_max: Maximum longitudinal velocity
-            width: width of the vehicle in meters
-            length: length of the vehicle in meters
-
             num_agents (int, default=2): number of agents in the environment
+            map (str, default='vegas'): name of the map used for the environment.
+            params (Parm): vehicle parameters.
 
-            timestep (float, default=0.01): physics timestep
-
-            ego_idx (int, default=0): ego's index in list of agents
     """
 
-    # NOTE: change matadata with default rendering-modes, add definition of render_fps
-    metadata = {"render_modes": ["human", "human_fast", "rgb_array"], "render_fps": 100}
-
-    def __init__(self, config: dict = None, render_mode=None, **kwargs):
+    def __init__(self, num_agents: int = 1, params: Param = Param(), **kwargs):
         super().__init__()
 
         # Configuration
-        self.config = self.default_config()
-        self.configure(config)
+        # self.config = self.default_config()
+        # self.configure(config)
 
-        self.seed = self.config["seed"]
-        self.map = self.config["map"]
-        self.params = self.config["params"]
-        self.num_agents = self.config["num_agents"]
-        self.timestep = self.config["timestep"]
-        self.ego_idx = self.config["ego_idx"]
-        self.integrator = IntegratorType.from_string(self.config["integrator"])
-        self.model = DynamicModel.from_string(self.config["model"])
-        self.observation_config = self.config["observation_config"]
-        self.action_type = CarAction(self.config["control_input"], params=self.params)
+        # self.seed = self.config["seed"]
+        # self.map = self.config["map"]
+        # self.params = self.config["params"]
+        # self.num_agents = self.config["num_agents"]
+        # self.timestep = self.config["timestep"]
+        # self.ego_idx = self.config["ego_idx"]
+        # self.integrator = IntegratorType.from_string(self.config["integrator"])
+        # self.model = DynamicModel.from_string(self.config["model"])
+        # self.observation_config = self.config["observation_config"]
+        # self.action_type = CarAction(self.config["control_input"], params=self.params)
 
         # radius to consider done
-        self.start_thresh = 0.5  # 10cm
+        # self.start_thresh = 0.5  # 10cm
 
         # env states
-        self.poses_x = []
-        self.poses_y = []
-        self.poses_theta = []
-        self.collisions = np.zeros((self.num_agents,))
+        # self.poses_x = []
+        # self.poses_y = []
+        # self.poses_theta = []
+        # self.collisions = np.zeros((self.num_agents,))
+
+        self.num_agents = num_agents
+
+        self.agents = [f"agent_{i}" for i in range(num_agents)]
+        self.a_to_i = {a: i for i, a in enumerate(self.agents)}
 
         # loop completion
-        self.near_start = True
-        self.num_toggles = 0
+        # self.near_start = True
+        # self.num_toggles = 0
 
         # race info
-        self.lap_times = np.zeros((self.num_agents,))
-        self.lap_counts = np.zeros((self.num_agents,))
-        self.current_time = 0.0
+        # self.lap_times = np.zeros((self.num_agents,))
+        # self.lap_counts = np.zeros((self.num_agents,))
+        # self.current_time = 0.0
 
         # finish line info
-        self.num_toggles = 0
-        self.near_start = True
-        self.near_starts = np.array([True] * self.num_agents)
-        self.toggle_list = np.zeros((self.num_agents,))
+        # self.num_toggles = 0
+        # self.near_start = True
+        # self.near_starts = np.array([True] * self.num_agents)
+        # self.toggle_list = np.zeros((self.num_agents,))
         self.start_xs = np.zeros((self.num_agents,))
         self.start_ys = np.zeros((self.num_agents,))
         self.start_thetas = np.zeros((self.num_agents,))
@@ -188,66 +215,12 @@ class F110Env(gym.Env):
             render_fps=self.metadata["render_fps"],
         )
 
-    @classmethod
-    def default_config(cls) -> dict:
-        """
-        Default environment configuration.
-
-        Can be overloaded in environment implementations, or by calling configure().
-
-        Args:
-            None
-
-        Returns:
-            a configuration dict
-        """
-        return {
-            "seed": 12345,
-            "map": "Spielberg",
-            "params": {
-                "mu": 1.0489,
-                "C_Sf": 4.718,
-                "C_Sr": 5.4562,
-                "lf": 0.15875,
-                "lr": 0.17145,
-                "h": 0.074,
-                "m": 3.74,
-                "I": 0.04712,
-                "s_min": -0.4189,
-                "s_max": 0.4189,
-                "sv_min": -3.2,
-                "sv_max": 3.2,
-                "v_switch": 7.319,
-                "a_max": 9.51,
-                "v_min": -5.0,
-                "v_max": 20.0,
-                "width": 0.31,
-                "length": 0.58,
-            },
-            "num_agents": 2,
-            "timestep": 0.01,
-            "ego_idx": 0,
-            "integrator": "rk4",
-            "model": "st",
-            "control_input": ["speed", "steering_angle"],
-            "observation_config": {"type": None},
-            "reset_config": {"type": None},
-        }
-
-    def configure(self, config: dict) -> None:
-        if config:
-            self.config = deep_update(self.config, config)
-            self.params = self.config["params"]
-
-            if hasattr(self, "sim"):
-                self.sim.update_params(self.config["params"])
-
-            if hasattr(self, "action_space"):
-                # if some parameters changed, recompute action space
-                self.action_type = CarAction(self.config["control_input"], params=self.params)
-                self.action_space = from_single_to_multi_action_space(
-                    self.action_type.space, self.num_agents
-                )
+    @partial(jax.jit, static_argnums=[0])
+    def step_env(
+        self, key: chex.PRNGKey, state: State, actions: Dict[str, chex.Array]
+    ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
+        # TODO: step f1tenth env
+        pass
 
     def _check_done(self):
         """

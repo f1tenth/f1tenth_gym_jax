@@ -2,15 +2,15 @@ import unittest
 
 import numpy as np
 
-from f1tenth_gym.envs import F110Env
-from f1tenth_gym.envs.utils import deep_update
+from f1tenth_gym_jax.envs import F110Env
+from f1tenth_gym_jax.envs.utils import deep_update
 
 
 class TestRenderer(unittest.TestCase):
     @staticmethod
     def _make_env(config={}, render_mode=None) -> F110Env:
         import gymnasium as gym
-        import f1tenth_gym
+        import f1tenth_gym_jax
 
         base_config = {
             "map": "Spielberg",

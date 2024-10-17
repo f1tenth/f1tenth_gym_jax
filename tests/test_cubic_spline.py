@@ -1,7 +1,7 @@
 import unittest
 
 import numpy as np
-from f1tenth_gym.envs.track import cubic_spline
+from f1tenth_gym_jax.envs.track import cubic_spline
 
 
 class TestCubicSpline(unittest.TestCase):

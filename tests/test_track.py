@@ -3,7 +3,7 @@ import time
 import unittest
 
 import numpy as np
-from f1tenth_gym.envs.track import Raceline, Track, find_track_dir
+from f1tenth_gym_jax.envs.track import Raceline, Track, find_track_dir
 
 
 class TestTrack(unittest.TestCase):

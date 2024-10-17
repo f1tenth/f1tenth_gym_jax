@@ -10,7 +10,7 @@ import scipy.optimize as so
 from scipy import interpolate
 from typing import Union, Optional
 
-from f1tenth_gym.envs.track.utils import nearest_point_on_trajectory
+from f1tenth_gym_jax.envs.track.utils import nearest_point_on_trajectory
 
 
 class CubicSpline2D:

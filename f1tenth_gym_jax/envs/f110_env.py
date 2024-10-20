@@ -106,6 +106,10 @@ class Param:
     map_name: str = "Spielberg"  # map for environment
     max_num_laps: int = 1  # maximum number of laps to run before done
 
+@jax.jit
+def ret_orig(x):
+    return x
+
 
 class F110Env(MultiAgentEnv):
     """
@@ -121,6 +125,7 @@ class F110Env(MultiAgentEnv):
 
     def __init__(self, num_agents: int = 1, params: Param = Param(), **kwargs):
         super().__init__()
+        self.params = params
         # agents
         self.num_agents = num_agents
         self.agents = [f"agent_{i}" for i in range(num_agents)]
@@ -282,7 +287,8 @@ class F110Env(MultiAgentEnv):
             frenet_states=jnp.zeros((self.num_agents, self.frenet_state_size)),
             num_laps=jnp.full((self.num_agents), 0),
         )
-        pass
+        state = jax.lax.cond(self.params.produce_scans, self._scan(state), ret_orig(state))
+        return self.get_obs(state), state
 
     @partial(jax.jit, static_argnums=[0])
     def get_obs(self, state: State) -> Dict[str, chex.Array]:
@@ -313,6 +319,10 @@ class F110Env(MultiAgentEnv):
             return all_states
 
         return {a: observation(i, self.num_agents) for i, a in enumerate(self.agents)}
+    
+    @partial(jax.jit, static_argnums=[0])
+    def _scan(self, state: State) -> State:
+        return state
 
     def _check_done(self):
         """

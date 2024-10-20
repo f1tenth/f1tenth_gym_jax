@@ -59,7 +59,7 @@ class State:
     collisions: chex.Array  # [n_agent, n_agent + 1]
 
     # laser scans TODO: might not need to be part of the state since doesn't depend on previous
-    scans: chex.Array  # [n_agent, n_rays]
+    scans: chex.Array = None  # [n_agent, n_rays]
 
     # race stuff
     num_laps: chex.Array  # [n_agent, ]
@@ -102,6 +102,7 @@ class Param:
     observe_others: bool = True  # whether can observe other agents
     num_rays: float = 1000  # number of rays in each scan
     map_name: str = "Spielberg"  # map for environment
+    max_num_laps: int = 1 # maximum number of laps to run before done
 
 
 class F110Env(MultiAgentEnv):
@@ -197,65 +198,89 @@ class F110Env(MultiAgentEnv):
             ),
         }
 
-        # start line info TODO: check if still needed
-        self.start_xs = np.zeros((self.num_agents,))
-        self.start_ys = np.zeros((self.num_agents,))
-        self.start_thetas = np.zeros((self.num_agents,))
-        self.start_rot = np.eye(2)
-        # initiate stuff
-        self.sim = Simulator(
-            self.params,
-            self.num_agents,
-            self.seed,
-            time_step=self.timestep,
-            integrator=self.integrator,
-            model=self.model,
-            action_type=self.action_type,
-        )
-        self.sim.set_map(self.map)
+        # load map
+        self.track = Track.from_track_name(params.map_name)
 
-        if isinstance(self.map, Track):
-            self.track = self.map
-        else:
-            self.track = Track.from_track_name(
-                self.map
-            )  # load track in gym env for convenience
+        # TODO: keep all start line, lap information in frenet frame
 
-        # observations
-        self.agent_ids = [f"agent_{i}" for i in range(self.num_agents)]
-
-        assert (
-            "type" in self.observation_config
-        ), "observation_config must contain 'type' key"
-        self.observation_type = observation_factory(env=self, **self.observation_config)
-        self.observation_space = self.observation_type.space()
-
-        # action space
-        self.action_space = from_single_to_multi_action_space(
-            self.action_type.space, self.num_agents
-        )
 
         # reset modes
         self.reset_fn = make_reset_fn(
             **self.config["reset_config"], track=self.track, num_agents=self.num_agents
         )
 
-        # stateful observations for rendering
-        # add choice of colors (same, random, ...)
-        self.render_obs = None
-        self.render_mode = render_mode
 
-        # match render_fps to integration timestep
-        self.metadata["render_fps"] = int(1.0 / self.timestep)
-        if self.render_mode == "human_fast":
-            self.metadata["render_fps"] *= 10  # boost fps by 10x
-        self.renderer, self.render_spec = make_renderer(
-            params=self.params,
-            track=self.track,
-            agent_ids=self.agent_ids,
-            render_mode=render_mode,
-            render_fps=self.metadata["render_fps"],
-        )
+
+
+
+
+
+
+
+
+
+        # # start line info TODO: check if still needed
+        # self.start_xs = np.zeros((self.num_agents,))
+        # self.start_ys = np.zeros((self.num_agents,))
+        # self.start_thetas = np.zeros((self.num_agents,))
+        # self.start_rot = np.eye(2)
+        # # initiate stuff
+        # self.sim = Simulator(
+        #     self.params,
+        #     self.num_agents,
+        #     self.seed,
+        #     time_step=self.timestep,
+        #     integrator=self.integrator,
+        #     model=self.model,
+        #     action_type=self.action_type,
+        # )
+        # self.sim.set_map(self.map)
+
+        # # observations
+        # self.agent_ids = [f"agent_{i}" for i in range(self.num_agents)]
+
+        # assert (
+        #     "type" in self.observation_config
+        # ), "observation_config must contain 'type' key"
+        # self.observation_type = observation_factory(env=self, **self.observation_config)
+        # self.observation_space = self.observation_type.space()
+
+        # # action space
+        # self.action_space = from_single_to_multi_action_space(
+        #     self.action_type.space, self.num_agents
+        # )
+
+    
+
+    # @partial(jax.jit, static_argnums=(0,))
+    # def step(
+    #     self,
+    #     key: chex.PRNGKey,
+    #     state: State,
+    #     actions: Dict[str, chex.Array],
+    #     reset_state: Optional[State] = None,
+    # ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
+    #     """Performs step transitions in the environment. Resets the environment if done.
+    #     To control the reset state, pass `reset_state`. Otherwise, the environment will reset randomly."""
+
+    #     key, key_reset = jax.random.split(key)
+    #     obs_st, states_st, rewards, dones, infos = self.step_env(key, state, actions)
+
+    #     if reset_state is None:
+    #         obs_re, states_re = self.reset(key_reset)
+    #     else:
+    #         states_re = reset_state
+    #         obs_re = self.get_obs(states_re)
+
+    #     # Auto-reset environment based on termination
+    #     states = jax.tree_map(
+    #         lambda x, y: jax.lax.select(dones["__all__"], x, y), states_re, states_st
+    #     )
+    #     obs = jax.tree_map(
+    #         lambda x, y: jax.lax.select(dones["__all__"], x, y), obs_re, obs_st
+    #     )
+    #     return obs, states, rewards, dones, infos
+
 
     @partial(jax.jit, static_argnums=[0])
     def step_env(
@@ -263,6 +288,46 @@ class F110Env(MultiAgentEnv):
     ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
         # TODO: step f1tenth env
         pass
+
+    @partial(jax.jit, static_argnums=(0,))
+    def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
+        """Performs resetting of the environment."""
+        # TODO: reset lap counters etc
+        # TODO: reset states
+        # TODO: get obs
+
+        state = State(
+            rewards=jnp.zeros((self.num_agents, )),
+            done=jnp.full((self.num_agents), False),
+            step=0,
+            cartesian_states=jnp.zeros((self.num_agents, self.state_size)),
+            frenet_states=jnp.zeros((self.num_agents, self.frenet_state_size)),
+            num_laps=jnp.full((self.num_agents), 0),
+        )
+        pass
+
+    @partial(jax.jit, static_argnums=[0])
+    def get_obs(self, state: State) -> Dict[str, chex.Array]:
+        """Applies observation function to state."""
+        
+        @partial(jax.jit, static_argnums=[1])
+        def observation(agent_ind, num_agents):
+            # extract scan if exist
+            agent_scan = jax.lax.select(state.scans is not None, state.scans[agent_ind, :], jnp.zeros((0, )))
+
+            # extract states
+            agent_state = state.cartesian_states[agent_ind, :]
+
+            # extract relative states
+            # TODO: need to deal with only 1 agent
+            # TODO: maybe don't need relative?
+            other_agent_ind = jnp.delete(jnp.arange(num_agents), agent_ind)
+            other_agent_states = state.cartesian_states[other_agent_ind]
+            relative_states = other_agent_states - agent_state
+            return
+        
+        return {a: observation(i, self.num_agents) for i, a in enumerate(self.agents)}
+
 
     def _check_done(self):
         """
@@ -363,6 +428,8 @@ class F110Env(MultiAgentEnv):
         info = {"checkpoint_done": toggle_list}
 
         return obs, reward, done, truncated, info
+    
+    
 
     def reset(self, seed=None, options=None):
         """
@@ -378,11 +445,12 @@ class F110Env(MultiAgentEnv):
             done (bool): if the simulation is done
             info (dict): auxillary information dictionary
         """
-        if seed is not None:
-            np.random.seed(seed=seed)
-        super().reset(seed=seed)
 
-        # reset counters and data members
+        
+
+
+
+
         self.current_time = 0.0
         self.collisions = np.zeros((self.num_agents,))
         self.num_toggles = 0

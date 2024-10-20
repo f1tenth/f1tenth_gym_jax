@@ -54,7 +54,9 @@ class State:
     step: int
 
     # dynamic states
-    cartesian_states: chex.Array  # [n_agent, [x, y, delta, v, psi, psi_dot, beta]]
+    cartesian_states: (
+        chex.Array
+    )  # [n_agent, [x, y, delta, v, psi, (psi_dot, beta)]], extra states for st in ()
     frenet_states: chex.Array  # [n_agent, [s, ey, epsi]]
     collisions: chex.Array  # [n_agent, n_agent + 1]
 
@@ -102,7 +104,7 @@ class Param:
     observe_others: bool = True  # whether can observe other agents
     num_rays: float = 1000  # number of rays in each scan
     map_name: str = "Spielberg"  # map for environment
-    max_num_laps: int = 1 # maximum number of laps to run before done
+    max_num_laps: int = 1  # maximum number of laps to run before done
 
 
 class F110Env(MultiAgentEnv):
@@ -138,14 +140,10 @@ class F110Env(MultiAgentEnv):
 
         if params.model == "st":
             self.model_func = vehicle_dynamics_st
-            self.observation_spaces = {
-                i: Box(-jnp.inf, jnp.inf, (5,)) for i in self.agents
-            }
+            self.state_size = 7
         elif params.model == "ks":
             self.model_func = vehicle_dynamics_ks
-            self.observation_spaces = {
-                i: Box(-jnp.inf, jnp.inf, (7,)) for i in self.agents
-            }
+            self.state_size = 5
         else:
             raise (
                 ValueError(
@@ -155,13 +153,6 @@ class F110Env(MultiAgentEnv):
 
         # spaces
         self.action_spaces = {i: Box(-jnp.inf, jnp.inf, (2,)) for i in self.agents}
-        if params.model == "st":
-            self.state_size = 5
-        elif params.model == "ks":
-            self.state_size = 7
-        else:
-            # shouldn't need to check
-            pass
 
         # scanning or not
         if params.produce_scans:
@@ -171,7 +162,8 @@ class F110Env(MultiAgentEnv):
 
         # observing others
         if params.observe_others:
-            self.all_other_state_size = self.state_size * (self.num_agents - 1)
+            # (relative_x, relative_y, relative_psi, longitudinal_v)
+            self.all_other_state_size = 4 * (self.num_agents - 1)
         else:
             self.all_other_state_size = 0
 
@@ -203,21 +195,10 @@ class F110Env(MultiAgentEnv):
 
         # TODO: keep all start line, lap information in frenet frame
 
-
         # reset modes
         self.reset_fn = make_reset_fn(
             **self.config["reset_config"], track=self.track, num_agents=self.num_agents
         )
-
-
-
-
-
-
-
-
-
-
 
         # # start line info TODO: check if still needed
         # self.start_xs = np.zeros((self.num_agents,))
@@ -250,8 +231,6 @@ class F110Env(MultiAgentEnv):
         #     self.action_type.space, self.num_agents
         # )
 
-    
-
     # @partial(jax.jit, static_argnums=(0,))
     # def step(
     #     self,
@@ -281,7 +260,6 @@ class F110Env(MultiAgentEnv):
     #     )
     #     return obs, states, rewards, dones, infos
 
-
     @partial(jax.jit, static_argnums=[0])
     def step_env(
         self, key: chex.PRNGKey, state: State, actions: Dict[str, chex.Array]
@@ -297,7 +275,7 @@ class F110Env(MultiAgentEnv):
         # TODO: get obs
 
         state = State(
-            rewards=jnp.zeros((self.num_agents, )),
+            rewards=jnp.zeros((self.num_agents,)),
             done=jnp.full((self.num_agents), False),
             step=0,
             cartesian_states=jnp.zeros((self.num_agents, self.state_size)),
@@ -309,25 +287,32 @@ class F110Env(MultiAgentEnv):
     @partial(jax.jit, static_argnums=[0])
     def get_obs(self, state: State) -> Dict[str, chex.Array]:
         """Applies observation function to state."""
-        
+
         @partial(jax.jit, static_argnums=[1])
         def observation(agent_ind, num_agents):
             # extract scan if exist
-            agent_scan = jax.lax.select(state.scans is not None, state.scans[agent_ind, :], jnp.zeros((0, )))
+            agent_scan = jax.lax.select(
+                state.scans is not None, state.scans[agent_ind, :], jnp.zeros((0,))
+            )
 
             # extract states
             agent_state = state.cartesian_states[agent_ind, :]
 
             # extract relative states
-            # TODO: need to deal with only 1 agent
-            # TODO: maybe don't need relative?
-            other_agent_ind = jnp.delete(jnp.arange(num_agents), agent_ind)
-            other_agent_states = state.cartesian_states[other_agent_ind]
-            relative_states = other_agent_states - agent_state
-            return
-        
-        return {a: observation(i, self.num_agents) for i, a in enumerate(self.agents)}
+            # (relative_x, relative_y, longitudinal_v, relative_psi)
+            relative_states = jax.lax.select(
+                num_agents > 1,
+                state.cartesian_states[jnp.delete(jnp.arange(num_agents), agent_ind)][
+                    [0, 1, 3, 4]
+                ]
+                - agent_state,
+                jnp.zeros((0, )),
+            )
 
+            all_states = jnp.hstack((agent_state, relative_states, agent_scan))
+            return all_states
+
+        return {a: observation(i, self.num_agents) for i, a in enumerate(self.agents)}
 
     def _check_done(self):
         """
@@ -428,8 +413,6 @@ class F110Env(MultiAgentEnv):
         info = {"checkpoint_done": toggle_list}
 
         return obs, reward, done, truncated, info
-    
-    
 
     def reset(self, seed=None, options=None):
         """
@@ -445,11 +428,6 @@ class F110Env(MultiAgentEnv):
             done (bool): if the simulation is done
             info (dict): auxillary information dictionary
         """
-
-        
-
-
-
 
         self.current_time = 0.0
         self.collisions = np.zeros((self.num_agents,))

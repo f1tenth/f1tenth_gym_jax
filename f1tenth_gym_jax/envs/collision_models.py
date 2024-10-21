@@ -5,10 +5,9 @@ Author: Hongrui Zheng
 """
 
 import numpy as np
-from numba import njit
-
 import jax
 import jax.numpy as jnp
+
 
 @jax.jit
 def collision_multiple_map(vertices, pixel_centers):
@@ -27,10 +26,13 @@ def collision_multiple_map(vertices, pixel_centers):
     cross_prods = jnp.cross(center_p, edges)
     left_of = jnp.where(cross_prods <= 0, 1.0, 0.0)
     all_left_of = jnp.sum(left_of, axis=-1)
-    collisions = jnp.where(jnp.sum(jnp.where(all_left_of == 4.0, 1.0, 0.0), axis=0) > 0.0, 1.0, 0.0)
+    collisions = jnp.where(
+        jnp.sum(jnp.where(all_left_of == 4.0, 1.0, 0.0), axis=0) > 0.0, 1.0, 0.0
+    )
     return collisions
 
-@njit(cache=True)
+
+@jax.jit
 def perpendicular(pt):
     """
     Return a 2-vector's perpendicular vector
@@ -41,43 +43,42 @@ def perpendicular(pt):
     Returns:
         pt (np.ndarray, (2,)): perpendicular vector
     """
-    temp = pt[0]
-    pt[0] = pt[1]
-    pt[1] = -1 * temp
+    pt = jnp.flip(pt)
+    pt = pt.at[1].multiply(-1)
     return pt
 
 
-@njit(cache=True)
+@jax.jit
 def tripleProduct(a, b, c):
     """
     Return triple product of three vectors
 
     Args:
-        a, b, c (np.ndarray, (2,)): input vectors
+        a, b, c (jax.numpy.ndarray, (2,)): input vectors
 
     Returns:
-        (np.ndarray, (2,)): triple product
+        (jax.numpy.ndarray, (2,)): triple product
     """
-    ac = a.dot(c)
-    bc = b.dot(c)
+    ac = jnp.dot(a, c)
+    bc = jnp.dot(b, c)
     return b * ac - a * bc
 
 
-@njit(cache=True)
+@jax.jit
 def avgPoint(vertices):
     """
     Return the average point of multiple vertices
 
     Args:
-        vertices (np.ndarray, (n, 2)): the vertices we want to find avg on
+        vertices (jax.numpy.ndarray, (n, 2)): the vertices we want to find avg on
 
     Returns:
-        avg (np.ndarray, (2,)): average point of the vertices
+        avg (jax.numpy.ndarray, (2,)): average point of the vertices
     """
-    return np.sum(vertices, axis=0) / vertices.shape[0]
+    return jnp.sum(vertices, axis=0) / vertices.shape[0]
 
 
-@njit(cache=True)
+@jax.jit
 def indexOfFurthestPoint(vertices, d):
     """
     Return the index of the vertex furthest away along a direction in the list of vertices
@@ -88,10 +89,10 @@ def indexOfFurthestPoint(vertices, d):
     Returns:
         idx (int): index of the furthest point
     """
-    return np.argmax(vertices.dot(d))
+    return jnp.argmax(jnp.dot(vertices, d))
 
 
-@njit(cache=True)
+@jax.jit
 def support(vertices1, vertices2, d):
     """
     Minkowski sum support function for GJK
@@ -109,7 +110,7 @@ def support(vertices1, vertices2, d):
     return vertices1[i] - vertices2[j]
 
 
-@njit(cache=True)
+@jax.jit
 def collision(vertices1, vertices2):
     """
     GJK test to see whether two bodies overlap
@@ -122,18 +123,17 @@ def collision(vertices1, vertices2):
         overlap (boolean): True if two bodies collide
     """
     index = 0
-    simplex = np.empty((3, 2))
+    simplex = jnp.empty((3, 2))
 
     position1 = avgPoint(vertices1)
     position2 = avgPoint(vertices2)
 
     d = position1 - position2
 
-    if d[0] == 0 and d[1] == 0:
-        d[0] = 1.0
+    d.at[0].set(jax.lax.select((d[0] == 0 and d[1] == 0), 1.0, d[0]))
 
     a = support(vertices1, vertices2, d)
-    simplex[index, :] = a
+    simplex.at[index, :].set(a)
 
     if d.dot(a) <= 0:
         return False

@@ -6,61 +6,16 @@ Original implementation: https://gitlab.lrz.de/tum-cps/commonroad-vehicle-models
 Author: Hongrui Zheng, Renukanandan Tumu
 """
 
-# import warnings
-# from enum import Enum
-# from numba import njit
-
 # jax
 import jax.numpy as jnp
 import jax
+import chex
 
 # others
 import numpy as np
 from functools import partial
 
-
-class DynamicModel(Enum):
-    KS = 1  # Kinematic Single Track
-    ST = 2  # Single Track
-
-    @staticmethod
-    def from_string(model: str):
-        if model == "ks":
-            warnings.warn(
-                "Chosen model is KS. This is different from previous versions of the gym."
-            )
-            return DynamicModel.KS
-        elif model == "st":
-            return DynamicModel.ST
-        else:
-            raise ValueError(f"Unknown model type {model}")
-
-    def get_initial_state(self, pose=None):
-        # initialize zero state
-        if self == DynamicModel.KS:
-            # state is [x, y, steer_angle, vel, yaw_angle]
-            state = np.zeros(5)
-        elif self == DynamicModel.ST:
-            # state is [x, y, steer_angle, vel, yaw_angle, yaw_rate, slip_angle]
-            state = np.zeros(7)
-        else:
-            raise ValueError(f"Unknown model type {self}")
-
-        # set initial pose if provided
-        if pose is not None:
-            state[0:2] = pose[0:2]
-            state[4] = pose[2]
-
-        return state
-
-    @property
-    def f_dynamics(self):
-        if self == DynamicModel.KS:
-            return vehicle_dynamics_ks
-        elif self == DynamicModel.ST:
-            return vehicle_dynamics_st
-        else:
-            raise ValueError(f"Unknown model type {self}")
+from .f110_env import Param
 
 
 @partial(jax.jit, static_argnums=[1, 2])
@@ -169,83 +124,58 @@ def steering_constraint(
     return steering_velocity
 
 
-@jax.jit
-def vehicle_dynamics_ks(
-    x,
-    u_init,
-    mu,
-    C_Sf,
-    C_Sr,
-    lf,
-    lr,
-    h,
-    m,
-    I,
-    s_min,
-    s_max,
-    sv_min,
-    sv_max,
-    v_switch,
-    a_max,
-    v_min,
-    v_max,
-):
+@partial(jax.jit, static_argnums=[1])
+def vehicle_dynamics_ks(x_and_u: chex.Array, params: Param) -> chex.Array:
     """
     Single Track Kinematic Vehicle Dynamics.
     Follows https://gitlab.lrz.de/tum-cps/commonroad-vehicle-models/-/blob/master/vehicleModels_commonRoad.pdf, section 5
 
         Args:
-            x (jax.numpy.ndarray (5, )): vehicle state vector (x0, x1, x2, x3, x4)
+            x_and_u (jax.numpy.ndarray (7, )): vehicle state vector with control input vector (x0, x1, x2, x3, x4, u0, u1)
                 x0: x position in global coordinates
                 x1: y position in global coordinates
                 x2: steering angle of front wheels
                 x3: velocity in x direction
                 x4: yaw angle
-            u (jax.numpy.ndarray (2, )): control input vector (u1, u2)
-                u1: steering angle velocity of front wheels
-                u2: longitudinal acceleration
-            mu (float): friction coefficient
-            C_Sf (float): cornering stiffness of front wheels
-            C_Sr (float): cornering stiffness of rear wheels
-            lf (float): distance from center of gravity to front axle
-            lr (float): distance from center of gravity to rear axle
-            h (float): height of center of gravity
-            m (float): mass of vehicle
-            I (float): moment of inertia of vehicle, about Z axis
-            s_min (float): minimum steering angle
-            s_max (float): maximum steering angle
-            sv_min (float): minimum steering velocity
-            sv_max (float): maximum steering velocity
-            v_switch (float): velocity above which the acceleration is no longer able to create wheel slip
-            a_max (float): maximum allowed acceleration
-            v_min (float): minimum allowed velocity
-            v_max (float): maximum allowed velocity
+                u0: steering angle velocity of front wheels
+                u1: longitudinal acceleration
+            params (Param): jittable dataclass with the following fields:
+                mu (float): friction coefficient
+                C_Sf (float): cornering stiffness of front wheels
+                C_Sr (float): cornering stiffness of rear wheels
+                lf (float): distance from center of gravity to front axle
+                lr (float): distance from center of gravity to rear axle
+                h (float): height of center of gravity
+                m (float): mass of vehicle
+                I (float): moment of inertia of vehicle, about Z axis
+                s_min (float): minimum steering angle
+                s_max (float): maximum steering angle
+                sv_min (float): minimum steering velocity
+                sv_max (float): maximum steering velocity
+                v_switch (float): velocity above which the acceleration is no longer able to create wheel slip
+                a_max (float): maximum allowed acceleration
+                v_min (float): minimum allowed velocity
+                v_max (float): maximum allowed velocity
 
         Returns:
-            f (jax.numpy.ndarray): right hand side of differential equations
+            f (jax.numpy.ndarray (7, )): right hand side of differential equations
     """
     # Controls
-    X = x[0]
-    Y = x[1]
-    DELTA = x[2]
-    V = x[3]
-    PSI = x[4]
-    # Raw Actions
-    RAW_STEER_VEL = u_init[0]
-    RAW_ACCL = u_init[1]
+    X = x_and_u[0]
+    Y = x_and_u[1]
+    DELTA = x_and_u[2]
+    V = x_and_u[3]
+    PSI = x_and_u[4]
     # wheelbase
-    lwb = lf + lr
+    lwb = params.lf + params.lr
 
-    # constraints
-    u = jnp.array(
-        [
-            steering_constraint(DELTA, RAW_STEER_VEL, s_min, s_max, sv_min, sv_max),
-            accl_constraints(V, RAW_ACCL, v_switch, a_max, v_min, v_max),
-        ]
+    # constrained controls
+    STEER_VEL = steering_constraint(
+        DELTA, x_and_u[5], params.s_min, params.s_max, params.sv_min, params.sv_max
     )
-    # Corrected Actions
-    STEER_VEL = u[0]
-    ACCL = u[1]
+    ACCL = accl_constraints(
+        V, x_and_u[6], params.v_switch, params.a_max, params.v_min, params.v_max
+    )
 
     # system dynamics
     f = jnp.array(
@@ -255,76 +185,57 @@ def vehicle_dynamics_ks(
             STEER_VEL,  # DELTA_DOT
             ACCL,  # V_DOT
             (V / lwb) * jnp.tan(DELTA),  # PSI_DOT
+            0.0,  # dummy dim
+            0.0,  # dummy dim
         ]
     )
     return f
 
 
-@jax.jit
-def vehicle_dynamics_st(
-    x,
-    u_init,
-    mu,
-    C_Sf,
-    C_Sr,
-    lf,
-    lr,
-    h,
-    m,
-    I,
-    s_min,
-    s_max,
-    sv_min,
-    sv_max,
-    v_switch,
-    a_max,
-    v_min,
-    v_max,
-):
+@partial(jax.jit, static_argnums=[1])
+def vehicle_dynamics_st(x_and_u: chex.Array, params: Param) -> chex.Array:
     """
     Single Track Vehicle Dynamics.
     From https://gitlab.lrz.de/tum-cps/commonroad-vehicle-models/-/blob/master/vehicleModels_commonRoad.pdf, section 7
 
         Args:
-            x (numpy.ndarray (7, )): vehicle state vector (x0, x1, x2, x3, x4, x5, x6)
+            x_and_u (jax.numpy.ndarray (7, )): vehicle state vector with control input vector (x0, x1, x2, x3, x4, u0, u1)
                 x0: x position in global coordinates
                 x1: y position in global coordinates
                 x2: steering angle of front wheels
                 x3: velocity in x direction
-                x4:yaw angle
-                x5: yaw rate
-                x6: slip angle at vehicle center
-            u (numpy.ndarray (2, )): control input vector (u1, u2)
-                u1: steering angle velocity of front wheels
-                u2: longitudinal acceleration
-            mu (float): friction coefficient
-            C_Sf (float): cornering stiffness of front wheels
-            C_Sr (float): cornering stiffness of rear wheels
-            lf (float): distance from center of gravity to front axle
-            lr (float): distance from center of gravity to rear axle
-            h (float): height of center of gravity
-            m (float): mass of vehicle
-            I (float): moment of inertia of vehicle, about Z axis
-            s_min (float): minimum steering angle
-            s_max (float): maximum steering angle
-            sv_min (float): minimum steering velocity
-            sv_max (float): maximum steering velocity
-            v_switch (float): velocity above which the acceleration is no longer able to create wheel spin
-            a_max (float): maximum allowed acceleration
-            v_min (float): minimum allowed velocity
-            v_max (float): maximum allowed velocity
+                x4: yaw angle
+                u0: steering angle velocity of front wheels
+                u1: longitudinal acceleration
+            params (Param): jittable dataclass with the following fields:
+                mu (float): friction coefficient
+                C_Sf (float): cornering stiffness of front wheels
+                C_Sr (float): cornering stiffness of rear wheels
+                lf (float): distance from center of gravity to front axle
+                lr (float): distance from center of gravity to rear axle
+                h (float): height of center of gravity
+                m (float): mass of vehicle
+                I (float): moment of inertia of vehicle, about Z axis
+                s_min (float): minimum steering angle
+                s_max (float): maximum steering angle
+                sv_min (float): minimum steering velocity
+                sv_max (float): maximum steering velocity
+                v_switch (float): velocity above which the acceleration is no longer able to create wheel slip
+                a_max (float): maximum allowed acceleration
+                v_min (float): minimum allowed velocity
+                v_max (float): maximum allowed velocity
 
         Returns:
-            f (numpy.ndarray): right hand side of differential equations
+            f (jax.numpy.ndarray (7, )): right hand side of differential equations
     """
     # States
-    X = x[0]
-    Y = x[1]
-    DELTA = x[2]
-    V = x[3]
-    PSI = x[4]
-    PSI_DOT = x[5]
-    BETA = x[6]
+    X = x_and_u[0]
+    Y = x_and_u[1]
+    DELTA = x_and_u[2]
+    V = x_and_u[3]
+    PSI = x_and_u[4]
+    PSI_DOT = x_and_u[5]
+    BETA = x_and_u[6]
     # We have to wrap the slip angle to [-pi, pi]
     # BETA = np.arctan2(np.sin(BETA), np.cos(BETA))
 
@@ -332,16 +243,20 @@ def vehicle_dynamics_st(
     g = 9.81
 
     # Controls w/ constraints
-    STEER_VEL = steering_constraint(DELTA, u_init[0], s_min, s_max, sv_min, sv_max)
-    ACCL = accl_constraints(V, u_init[1], v_switch, a_max, v_min, v_max)
+    STEER_VEL = steering_constraint(
+        DELTA, x_and_u[7], params.s_min, params.s_max, params.sv_min, params.sv_max
+    )
+    ACCL = accl_constraints(
+        V, x_and_u[8], params.v_switch, params.a_max, params.v_min, params.v_max
+    )
 
     # switch to kinematic model for small velocities
     # wheelbase
-    lwb = lf + lr
-    BETA_HAT = np.arctan(np.tan(DELTA) * lr / lwb)
+    lwb = params.lf + params.lr
+    BETA_HAT = np.arctan(np.tan(DELTA) * params.lr / lwb)
     BETA_DOT = (
-        (1 / (1 + (np.tan(DELTA) * (lr / lwb)) ** 2))
-        * (lr / (lwb * np.cos(DELTA) ** 2))
+        (1 / (1 + (np.tan(DELTA) * (params.lr / lwb)) ** 2))
+        * (params.lr / (lwb * np.cos(DELTA) ** 2))
         * STEER_VEL
     )
     f_ks = np.array(
@@ -358,6 +273,8 @@ def vehicle_dynamics_st(
                 + ((V * np.cos(BETA) * STEER_VEL) / (np.cos(DELTA) ** 2))
             ),  # PSI_DOT_DOT
             BETA_DOT,  # BETA_DOT
+            0.0,  # dummy dim
+            0.0,  # dummy dim
         ]
     )
 
@@ -369,25 +286,43 @@ def vehicle_dynamics_st(
             STEER_VEL,  # DELTA_DOT
             ACCL,  # V_DOT
             PSI_DOT,  # PSI_DOT
-            ((mu * m) / (I * (lf + lr)))
+            ((params.mu * params.m) / (params.I * (params.lf + params.lr)))
             * (
-                lf * C_Sf * (g * lr - ACCL * h) * DELTA
-                + (lr * C_Sr * (g * lf + ACCL * h) - lf * C_Sf * (g * lr - ACCL * h))
+                params.lf * params.C_Sf * (g * params.lr - ACCL * params.h) * DELTA
+                + (
+                    params.lr * params.C_Sr * (g * params.lf + ACCL * params.h)
+                    - params.lf * params.C_Sf * (g * params.lr - ACCL * params.h)
+                )
                 * BETA
                 - (
-                    lf * lf * C_Sf * (g * lr - ACCL * h)
-                    + lr * lr * C_Sr * (g * lf + ACCL * h)
+                    params.lf
+                    * params.lf
+                    * params.C_Sf
+                    * (g * params.lr - ACCL * params.h)
+                    + params.lr
+                    * params.lr
+                    * params.C_Sr
+                    * (g * params.lf + ACCL * params.h)
                 )
                 * (PSI_DOT / V)
             ),  # PSI_DOT_DOT
-            (mu / (V * (lr + lf)))
+            (params.mu / (V * (params.lr + params.lf)))
             * (
-                C_Sf * (g * lr - ACCL * h) * DELTA
-                - (C_Sr * (g * lf + ACCL * h) + C_Sf * (g * lr - ACCL * h)) * BETA
-                + (C_Sr * (g * lf + ACCL * h) * lr - C_Sf * (g * lr - ACCL * h) * lf)
+                params.C_Sf * (g * params.lr - ACCL * params.h) * DELTA
+                - (
+                    params.C_Sr * (g * params.lf + ACCL * params.h)
+                    + params.C_Sf * (g * params.lr - ACCL * params.h)
+                )
+                * BETA
+                + (
+                    params.C_Sr * (g * params.lf + ACCL * params.h) * params.lr
+                    - params.C_Sf * (g * params.lr - ACCL * params.h) * params.lf
+                )
                 * (PSI_DOT / V)
             )
             - PSI_DOT,  # BETA_DOT
+            0.0,  # dummy dim
+            0.0,  # dummy dim
         ]
     )
 

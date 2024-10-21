@@ -269,8 +269,30 @@ class F110Env(MultiAgentEnv):
     def step_env(
         self, key: chex.PRNGKey, state: State, actions: Dict[str, chex.Array]
     ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
-        # TODO: step f1tenth env
-        pass
+        # 1. state + scan
+        # make x_and_u
+        x = state.cartesian_states
+        us = jnp.array([actions[i] for i in self.agents])
+        x_and_u = jnp.hstack((x, us))
+        # integrate dynamics, vmapped
+        integrator = jax.vmap(self.integrator_func, in_axes=[0])
+        new_x_and_u = integrator(self.model_func, x_and_u, self.params)
+        state.cartesian_states = new_x_and_u[:, :-2]
+        state = jax.lax.cond(self.params.produce_scans, self._scan(state), ret_orig(state))
+
+        # 2. get obs
+        obs = self.get_obs(state)
+
+        # 3. dones
+        dones = self.check_dones(state)
+
+        # 4. rewards
+        rewards = self.get_rewards(state)
+
+        # 5. info
+        infos = {}
+
+        return obs, state, rewards, dones, infos
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
@@ -319,22 +341,12 @@ class F110Env(MultiAgentEnv):
             return all_states
 
         return {a: observation(i, self.num_agents) for i, a in enumerate(self.agents)}
-    
+
     @partial(jax.jit, static_argnums=[0])
-    def _scan(self, state: State) -> State:
-        return state
+    def check_done(self, state: State) -> Dict[str, bool]:
+        # TODO: check current s, ey
 
-    def _check_done(self):
-        """
-        Check if the current rollout is done
-
-        Args:
-            None
-
-        Returns:
-            done (bool): whether the rollout is done
-            toggle_list (list[int]): each agent's toggle list for crossing the finish zone
-        """
+        # TODO: 
 
         # this is assuming 2 agents
         # TODO: switch to maybe s-based
@@ -367,181 +379,11 @@ class F110Env(MultiAgentEnv):
         done = (self.collisions[self.ego_idx]) or np.all(self.toggle_list >= 4)
 
         return bool(done), self.toggle_list >= 4
+    
+    @partial(jax.jit, static_argnums=[0])
+    def _scan(self, state: State,  key: chex.PRNGKey) -> State:
+        return state
 
-    def _update_state(self):
-        """
-        Update the env's states according to observations.
-        """
-        self.poses_x = self.sim.agent_poses[:, 0]
-        self.poses_y = self.sim.agent_poses[:, 1]
-        self.poses_theta = self.sim.agent_poses[:, 2]
-        self.collisions = self.sim.collisions
-
-    def step(self, action):
-        """
-        Step function for the gym env
-
-        Args:
-            action (np.ndarray(num_agents, 2))
-
-        Returns:
-            obs (dict): observation of the current step
-            reward (float, default=self.timestep): step reward, currently is physics timestep
-            done (bool): if the simulation is done
-            info (dict): auxillary information dictionary
-        """
-
-        # call simulation step
-        self.sim.step(action)
-
-        # observation
-        obs = self.observation_type.observe()
-
-        # times
-        reward = self.timestep
-        self.current_time = self.current_time + self.timestep
-
-        # update data member
-        self._update_state()
-
-        # rendering observation
-        self.render_obs = {
-            "ego_idx": self.sim.ego_idx,
-            "poses_x": self.sim.agent_poses[:, 0],
-            "poses_y": self.sim.agent_poses[:, 1],
-            "poses_theta": self.sim.agent_poses[:, 2],
-            "steering_angles": self.sim.agent_steerings,
-            "lap_times": self.lap_times,
-            "lap_counts": self.lap_counts,
-            "collisions": self.sim.collisions,
-            "sim_time": self.current_time,
-        }
-
-        # check done
-        done, toggle_list = self._check_done()
-        truncated = False
-        info = {"checkpoint_done": toggle_list}
-
-        return obs, reward, done, truncated, info
-
-    def reset(self, seed=None, options=None):
-        """
-        Reset the gym environment by given poses
-
-        Args:
-            seed: random seed for the reset
-            options: dictionary of options for the reset containing initial poses of the agents
-
-        Returns:
-            obs (dict): observation of the current step
-            reward (float, default=self.timestep): step reward, currently is physics timestep
-            done (bool): if the simulation is done
-            info (dict): auxillary information dictionary
-        """
-
-        self.current_time = 0.0
-        self.collisions = np.zeros((self.num_agents,))
-        self.num_toggles = 0
-        self.near_start = True
-        self.near_starts = np.array([True] * self.num_agents)
-        self.toggle_list = np.zeros((self.num_agents,))
-
-        # states after reset
-        if options is not None and "poses" in options:
-            poses = options["poses"]
-        else:
-            poses = self.reset_fn.sample()
-
-        assert isinstance(poses, np.ndarray) and poses.shape == (
-            self.num_agents,
-            3,
-        ), "Initial poses must be a numpy array of shape (num_agents, 3)"
-
-        self.start_xs = poses[:, 0]
-        self.start_ys = poses[:, 1]
-        self.start_thetas = poses[:, 2]
-        self.start_rot = np.array(
-            [
-                [
-                    np.cos(-self.start_thetas[self.ego_idx]),
-                    -np.sin(-self.start_thetas[self.ego_idx]),
-                ],
-                [
-                    np.sin(-self.start_thetas[self.ego_idx]),
-                    np.cos(-self.start_thetas[self.ego_idx]),
-                ],
-            ]
-        )
-
-        # call reset to simulator
-        self.sim.reset(poses)
-
-        # get no input observations
-        action = np.zeros((self.num_agents, 2))
-        obs, _, _, _, info = self.step(action)
-
-        return obs, info
-
-    def update_map(self, map_name: str):
-        """
-        Updates the map used by simulation
-
-        Args:
-            map_name (str): name of the map
-
-        Returns:
-            None
-        """
-        self.sim.set_map(map_name)
-        self.track = Track.from_track_name(map_name)
-
-    def update_params(self, params, index=-1):
-        """
-        Updates the parameters used by simulation for vehicles
-
-        Args:
-            params (dict): dictionary of parameters
-            index (int, default=-1): if >= 0 then only update a specific agent's params
-
-        Returns:
-            None
-        """
-        self.sim.update_params(params, agent_idx=index)
-
-    def add_render_callback(self, callback_func):
-        """
-        Add extra drawing function to call during rendering.
-
-        Args:
-            callback_func (function (EnvRenderer) -> None): custom function to called during render()
-        """
-
-        self.renderer.add_renderer_callback(callback_func)
-
-    def render(self, mode="human"):
-        """
-        Renders the environment with pyglet. Use mouse scroll in the window to zoom in/out, use mouse click drag to pan. Shows the agents, the map, current fps (bottom left corner), and the race information near as text.
-
-        Args:
-            mode (str, default='human'): rendering mode, currently supports:
-                'human': slowed down rendering such that the env is rendered in a way that sim time elapsed is close to real time elapsed
-                'human_fast': render as fast as possible
-
-        Returns:
-            None
-        """
-        # NOTE: separate render (manage render-mode) from render_frame (actual rendering with pyglet)
-
-        if self.render_mode not in self.metadata["render_modes"]:
-            return
-
-        self.renderer.update(state=self.render_obs)
-        return self.renderer.render()
-
-    def close(self):
-        """
-        Ensure renderer is closed upon deletion
-        """
-        if self.renderer is not None:
-            self.renderer.close()
-        super().close()
+    @partial(jax.jit, static_argnums=[0])
+    def _collisions(self, state: State) -> State:
+        return state

@@ -202,8 +202,8 @@ class F110Env(MultiAgentEnv):
         # load map
         self.track = Track.from_track_name(params.map_name)
 
-        # TODO: get pixel centers
-        self.pixel_centers = None
+        # set pixel centers of occupancy map
+        self._set_pixelcenters()
 
         # TODO: keep all start line, lap information in frenet frame
 
@@ -271,6 +271,19 @@ class F110Env(MultiAgentEnv):
     #         lambda x, y: jax.lax.select(dones["__all__"], x, y), obs_re, obs_st
     #     )
     #     return obs, states, rewards, dones, infos
+
+    def _set_pixelcenters(self):
+        map_img = self.track.occ_map
+        h, w = map_img.shape
+        reso = self.track.resolution
+        ox = self.track.ox
+        oy = self.track.oy
+        x_ind, y_ind = np.meshgrid(range(w), range(h))
+        pcx = (x_ind * reso + ox + reso / 2).flatten()
+        pcy = (y_ind * reso + oy + reso / 2).flatten()
+        self.pixel_centers = np.vstack((pcx, pcy)).T
+        map_mask = (map_img == 0.0).flatten()
+        self.pixel_centers = self.pixel_centers[map_mask, :]
 
     @partial(jax.jit, static_argnums=[0])
     def step_env(

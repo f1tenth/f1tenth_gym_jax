@@ -18,6 +18,9 @@ class Track:
     ys: np.ndarray
     vxs: np.ndarray
     occ_map: np.ndarray
+    resolution: float
+    ox: float
+    oy: float
     centerline: CubicSplineND
     raceline: CubicSplineND
     filepath: Optional[str]
@@ -90,6 +93,9 @@ class Track:
         map_metadata = yaml.safe_load(
             open(str(track_dir / f"{track_dir.stem}_map.yaml"), "r")
         )
+        resolution = map_metadata["resolution"]
+        ox = map_metadata["origin"][0]
+        oy = map_metadata["origin"][1]
 
         # load occupancy grid
         map_filename = pathlib.Path(map_metadata["image"])
@@ -135,7 +141,16 @@ class Track:
         else:
             raceline = None
 
-        return Track(xs=cl_xs, ys=cl_ys, centerline=centerline, raceline=raceline)
+        return Track(
+            xs=cl_xs,
+            ys=cl_ys,
+            centerline=centerline,
+            raceline=raceline,
+            occ_map=occ_map,
+            resolution=resolution,
+            ox=ox,
+            oy=oy,
+        )
 
     @staticmethod
     def from_numpy(waypoints: np.ndarray, s_frame_max, downsample_step=1):

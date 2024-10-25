@@ -1,5 +1,5 @@
 """
-Prototype of Utility functions and GJK algorithm for Collision checks between vehicles
+Prototype of Utility functions and GJK algorithm / Separating Axis Theorem for Collision checks between vehicles
 Originally from https://github.com/kroitor/gjk.c
 Author: Hongrui Zheng
 """
@@ -7,10 +7,69 @@ Author: Hongrui Zheng
 import numpy as np
 import jax
 import jax.numpy as jnp
+import chex
+
+import os
+from functools import partial
 
 
 @jax.jit
-def collision_multiple_map(vertices, pixel_centers):
+def sa(normal: chex.Array, vertices1: chex.Array, vertices2: chex.Array) -> bool:
+    """
+    See if two bodies' projections overlap along a normal axis
+
+    Args:
+        vertices1 (jax.numpy.ndarray, (n, 2)): vertices of the first body
+        vertices2 (jax.numpy.ndarray, (n, 2)): vertices of the second body
+
+    Returns:
+        overlap (boolean): True if two projections overlap
+    """
+
+    # project vertices of both bodies onto the axis
+    proj1 = jnp.dot(vertices1, normal)
+    proj2 = jnp.dot(vertices2, normal)
+
+    # Check if there is an overlap on this axis
+    return jnp.logical_not(
+        (jnp.max(proj1) >= jnp.min(proj2)) & (jnp.max(proj2) >= jnp.min(proj1))
+    )
+
+
+@jax.jit
+def collision(vertices: chex.Array) -> bool:
+    """
+    SAT test to see whether two bodies overlap
+
+    Args:
+        vertices1 (jax.numpy.ndarray, (n, 2)): vertices of the first body
+        vertices2 (jax.numpy.ndarray, (n, 2)): vertices of the second body
+
+    Returns:
+        overlap (boolean): True if two bodies collide
+    """
+    vertices1 = vertices[:, :2]
+    vertices2 = vertices[:, 2:]
+    # Find the normals for both rectangles
+    vec1 = jnp.roll(vertices1, -1, axis=0) - vertices1
+    vec2 = jnp.roll(vertices2, -1, axis=0) - vertices2
+    normals = jnp.concatenate(
+        (
+            jnp.column_stack((-vec1[:, 1], vec1[:, 0])),
+            jnp.column_stack((-vec2[:, 1], vec2[:, 0])),
+        ),
+        axis=0,
+    )
+
+    separating_axis = jax.vmap(partial(sa, vertices1=vertices1, vertices2=vertices2))(
+        normals
+    )
+
+    return jnp.logical_not(jnp.any(separating_axis))
+
+
+@jax.jit
+def collision_map(vertices, pixel_centers):
     """
     Check vertices collision with map occupancy
     Rasters car polygon to map occupancy
@@ -111,7 +170,7 @@ def support(vertices1, vertices2, d):
 
 
 @jax.jit
-def collision(vertices1, vertices2):
+def collision_gjk(vertices1, vertices2):
     """
     GJK test to see whether two bodies overlap
 
@@ -138,47 +197,109 @@ def collision(vertices1, vertices2):
     if d.dot(a) <= 0:
         return False
 
-    d = -a
+    @jax.jit
+    def collision_loop():
+        d = -a
+        iter_count = 0
 
-    iter_count = 0
-    while iter_count < 1e3:
-        a = support(vertices1, vertices2, d)
-        index += 1
-        simplex[index, :] = a
-        if d.dot(a) <= 0:
-            return False
+        def cond_fn(state):
+            iter_count, index, simplex, d, a, bool_ret = state
+            return iter_count < 1e3
 
-        ao = -a
+        def body_fn(state):
+            iter_count, index, simplex, d, a, bool_ret = state
+            a = support(vertices1, vertices2, d)
+            index += 1
+            simplex = simplex.at[index, :].set(a)
+            bool_ret = d.dot(a) > 0
+            state = (iter_count, index, simplex, d, a, bool_ret)
 
-        if index < 2:
-            b = simplex[0, :]
+            ao = -a
+
+            def branch_fn(state):
+                iter_count, index, simplex, d, a, bool_ret = state
+                b = simplex[0, :]
+                ab = b - a
+                d = tripleProduct(ab, ao, ab)
+                d = jax.lax.cond(
+                    jnp.linalg.norm(d) < 1e-10, lambda _: perpendicular(ab), lambda _: d
+                )
+                return iter_count, index, simplex, d, a, bool_ret
+
+            def branch_fn2(state):
+                iter_count, index, simplex, d, a, bool_ret = state
+                b = simplex[1, :]
+                c = simplex[0, :]
+                ab = b - a
+                ac = c - a
+                acperp = tripleProduct(ab, ac, ac)
+                # TODO: double check this part
+                d = jax.lax.cond(
+                    acperp.dot(ao) >= 0,
+                    lambda _: acperp,
+                    lambda _: tripleProduct(ac, ab, ab),
+                )
+                bool_ret = jnp.dot(d, ao) < 0 and bool_ret
+                simplex = jax.lax.cond(
+                    acperp.dot(ao) < 0,
+                    lambda _: simplex.at[0, :].set(simplex[1, :]),
+                    lambda _: simplex,
+                )
+                simplex = simplex.at[1, :].set(simplex[2, :])
+                index -= 1
+                return iter_count, index, simplex, d, a, bool_ret
+
+            state = jax.lax.cond(index < 2, branch_fn, branch_fn2, state)
+            iter_count += 1
+            return iter_count, index, simplex, d, a
+
+        state = (0, index, simplex, d, a, False)
+        state = jax.lax.while_loop(cond_fn, body_fn, state)
+        return state[4].dot(state[3]) <= 0
+
+        while iter_count < 1e3:
+            a = support(vertices1, vertices2, d)
+            index += 1
+            simplex[index, :] = a
+            if d.dot(a) <= 0:
+                return False
+
+            ao = -a
+
+            if index < 2:
+                b = simplex[0, :]
+                ab = b - a
+                d = tripleProduct(ab, ao, ab)
+                if np.linalg.norm(d) < 1e-10:
+                    d = perpendicular(ab)
+                continue
+
+            b = simplex[1, :]
+            c = simplex[0, :]
             ab = b - a
-            d = tripleProduct(ab, ao, ab)
-            if np.linalg.norm(d) < 1e-10:
-                d = perpendicular(ab)
-            continue
+            ac = c - a
 
-        b = simplex[1, :]
-        c = simplex[0, :]
-        ab = b - a
-        ac = c - a
+            acperp = tripleProduct(ab, ac, ac)
 
-        acperp = tripleProduct(ab, ac, ac)
+            if acperp.dot(ao) >= 0:
+                d = acperp
+            else:
+                abperp = tripleProduct(ac, ab, ab)
+                if abperp.dot(ao) < 0:
+                    return True
+                simplex[0, :] = simplex[1, :]
+                d = abperp
 
-        if acperp.dot(ao) >= 0:
-            d = acperp
-        else:
-            abperp = tripleProduct(ac, ab, ab)
-            if abperp.dot(ao) < 0:
-                return True
-            simplex[0, :] = simplex[1, :]
-            d = abperp
+            simplex[1, :] = simplex[2, :]
+            index -= 1
 
-        simplex[1, :] = simplex[2, :]
-        index -= 1
+            iter_count += 1
+        return False
+        return in_collision
 
-        iter_count += 1
-    return False
+    ret = jax.lax.cond(jnp.dot(d, a) <= 0, collision_loop, lambda x: False)
+
+    return ret
 
 
 @njit(cache=True)
@@ -217,7 +338,7 @@ Utility functions for getting vertices by pose and shape
 """
 
 
-@njit(cache=True)
+@jax.jit
 def get_trmtx(pose):
     """
     Get transformation matrix of vehicle frame -> global frame
@@ -231,9 +352,9 @@ def get_trmtx(pose):
     x = pose[0]
     y = pose[1]
     th = pose[2]
-    cos = np.cos(th)
-    sin = np.sin(th)
-    H = np.array(
+    cos = jnp.cos(th)
+    sin = jnp.sin(th)
+    H = jnp.array(
         [
             [cos, -sin, 0.0, x],
             [sin, cos, 0.0, y],
@@ -244,7 +365,7 @@ def get_trmtx(pose):
     return H
 
 
-@njit(cache=True)
+@jax.jit
 def get_vertices(pose, length, width):
     """
     Utility function to return vertices of the car body given pose and size

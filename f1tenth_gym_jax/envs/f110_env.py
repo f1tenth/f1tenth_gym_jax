@@ -41,6 +41,9 @@ from .integrator import integrate_euler, integrate_rk4
 
 # scanning
 
+# collisions
+from .collision_models import collision, collision_map, get_vertices
+
 
 @struct.dataclass
 class State:
@@ -105,6 +108,7 @@ class Param:
     num_rays: float = 1000  # number of rays in each scan
     map_name: str = "Spielberg"  # map for environment
     max_num_laps: int = 1  # maximum number of laps to run before done
+
 
 @jax.jit
 def ret_orig(x):
@@ -198,6 +202,9 @@ class F110Env(MultiAgentEnv):
         # load map
         self.track = Track.from_track_name(params.map_name)
 
+        # TODO: get pixel centers
+        self.pixel_centers = None
+
         # TODO: keep all start line, lap information in frenet frame
 
         # reset modes
@@ -278,7 +285,9 @@ class F110Env(MultiAgentEnv):
         integrator = jax.vmap(self.integrator_func, in_axes=[0])
         new_x_and_u = integrator(self.model_func, x_and_u, self.params)
         state.cartesian_states = new_x_and_u[:, :-2]
-        state = jax.lax.cond(self.params.produce_scans, self._scan(state), ret_orig(state))
+        state = jax.lax.cond(
+            self.params.produce_scans, self._scan(state), ret_orig(state)
+        )
 
         # 2. get obs
         obs = self.get_obs(state)
@@ -309,7 +318,9 @@ class F110Env(MultiAgentEnv):
             frenet_states=jnp.zeros((self.num_agents, self.frenet_state_size)),
             num_laps=jnp.full((self.num_agents), 0),
         )
-        state = jax.lax.cond(self.params.produce_scans, self._scan(state), ret_orig(state))
+        state = jax.lax.cond(
+            self.params.produce_scans, self._scan(state), ret_orig(state)
+        )
         return self.get_obs(state), state
 
     @partial(jax.jit, static_argnums=[0])
@@ -334,7 +345,7 @@ class F110Env(MultiAgentEnv):
                     [0, 1, 3, 4]
                 ]
                 - agent_state,
-                jnp.zeros((0, )),
+                jnp.zeros((0,)),
             )
 
             all_states = jnp.hstack((agent_state, relative_states, agent_scan))
@@ -346,7 +357,7 @@ class F110Env(MultiAgentEnv):
     def check_done(self, state: State) -> Dict[str, bool]:
         # TODO: check current s, ey
 
-        # TODO: 
+        # TODO:
 
         # this is assuming 2 agents
         # TODO: switch to maybe s-based
@@ -379,11 +390,45 @@ class F110Env(MultiAgentEnv):
         done = (self.collisions[self.ego_idx]) or np.all(self.toggle_list >= 4)
 
         return bool(done), self.toggle_list >= 4
-    
+
     @partial(jax.jit, static_argnums=[0])
-    def _scan(self, state: State,  key: chex.PRNGKey) -> State:
+    def _scan(self, state: State, key: chex.PRNGKey) -> State:
         return state
 
     @partial(jax.jit, static_argnums=[0])
     def _collisions(self, state: State) -> State:
+        # extract vertices from all cars (n_agent, 4, 2)
+        all_vertices = jax.vmap(
+            partial(get_vertices, length=self.params.length, width=self.params.width),
+            in_axes=[0],
+        )(state.cartesian_states[:, [0, 1, 4]])
+
+        # check pairwise collisions
+        pairwise_indices1, pairwise_indices2 = jnp.triu_indices(self.num_agents, 1)
+        pairwise_vertices = jnp.concatenate(
+            (all_vertices[pairwise_indices1], all_vertices[pairwise_indices2]), axis=-1
+        )
+        # (n_agent!, )
+        pairwise_collisions = jax.vmap(collision, in_axes=[0])(pairwise_vertices)
+
+        # get indices that are colliding
+        collided_ind = jax.lax.select(
+            pairwise_collisions,
+            jnp.column_stack(pairwise_indices1, pairwise_indices2),
+            -1 * jnp.ones((len(pairwise_indices1), 2)),
+        ).flatten()
+        padded_collisions = jnp.zeros((self.num_agents + 1,))
+        padded_collisions.at[collided_ind].set(1)
+        padded_collisions = padded_collisions[:-1]
+
+        # check map collisions (n_agent, )
+        map_collisions = collision_map(
+            state.cartesian_states[:, [0, 1, 4]], self.pixel_centers
+        )
+
+        # combine collisions
+        full_collisions = jnp.logical_or(padded_collisions, map_collisions)
+
+        # update state
+        state.collisions = full_collisions
         return state

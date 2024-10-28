@@ -120,6 +120,7 @@ class Track:
             cl_ys = np.append(cl_ys, cl_ys[0])
             centerline = CubicSplineND(cl_xs, cl_ys)
         else:
+            raise ValueError("At least centerline file is expected to construct track.")
             centerline = None
 
         # if exist loat raceline

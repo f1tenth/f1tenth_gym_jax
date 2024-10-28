@@ -202,6 +202,12 @@ class F110Env(MultiAgentEnv):
         # load map
         self.track = Track.from_track_name(params.map_name)
 
+        # get a interior point of track as winding number looking point
+        start_point_curvature = self.track.calc_curvature_jax(0.0)
+        self.winding_point = self.track.frenet_to_cartesian_jax(
+            s=0.0, ey=jnp.sign(start_point_curvature) * 1.5
+        )
+
         # set pixel centers of occupancy map
         self._set_pixelcenters()
 
@@ -302,6 +308,9 @@ class F110Env(MultiAgentEnv):
             self.params.produce_scans, self._scan(state), ret_orig(state)
         )
 
+        # 2. collisions
+        state = self._collisions(state)
+
         # 2. get obs
         obs = self.get_obs(state)
 
@@ -320,6 +329,10 @@ class F110Env(MultiAgentEnv):
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
         """Performs resetting of the environment."""
         # TODO: reset lap counters etc
+        self.num_laps = jnp.zeros((self.num_agents,), dtype=int)
+        self.accumulated_angles = jnp.zeros(
+            self.num_agents,
+        )
         # TODO: reset states
         # TODO: get obs
 
@@ -334,6 +347,8 @@ class F110Env(MultiAgentEnv):
         state = jax.lax.cond(
             self.params.produce_scans, self._scan(state), ret_orig(state)
         )
+
+        self.prev_winding_vector = state.cartesian_states[:, [0, 1]] - self.winding_point
         return self.get_obs(state), state
 
     @partial(jax.jit, static_argnums=[0])
@@ -369,40 +384,22 @@ class F110Env(MultiAgentEnv):
     @partial(jax.jit, static_argnums=[0])
     def check_done(self, state: State) -> Dict[str, bool]:
         # TODO: check current s, ey
+        s, ey, ephi = self.track.vmap_cartesian_to_frenet_jax(
+            state.cartesian_states[:, [0, 1, 4]]
+        )
+        s_diff = s - self.starting_line_s
+        self.num_laps = self.num_laps + jnp.floor(s_diff / self.track.length)
 
-        # TODO:
+        laps_done = self.num_laps >= self.max_num_laps
 
-        # this is assuming 2 agents
-        # TODO: switch to maybe s-based
-        left_t = 2
-        right_t = 2
+        winding_vector = state.cartesian_states[:, [0, 1]] - self.winding_point
 
-        poses_x = np.array(self.poses_x) - self.start_xs
-        poses_y = np.array(self.poses_y) - self.start_ys
-        delta_pt = np.dot(self.start_rot, np.stack((poses_x, poses_y), axis=0))
-        temp_y = delta_pt[1, :]
-        idx1 = temp_y > left_t
-        idx2 = temp_y < -right_t
-        temp_y[idx1] -= left_t
-        temp_y[idx2] = -right_t - temp_y[idx2]
-        temp_y[np.invert(np.logical_or(idx1, idx2))] = 0
+        # collision dones
+        done_dict = {
+            i: (state.collisions[i] or laps_done[i]) for i in range(self.num_agents)
+        }
 
-        dist2 = delta_pt[0, :] ** 2 + temp_y**2
-        closes = dist2 <= 0.1
-        for i in range(self.num_agents):
-            if closes[i] and not self.near_starts[i]:
-                self.near_starts[i] = True
-                self.toggle_list[i] += 1
-            elif not closes[i] and self.near_starts[i]:
-                self.near_starts[i] = False
-                self.toggle_list[i] += 1
-            self.lap_counts[i] = self.toggle_list[i] // 2
-            if self.toggle_list[i] < 4:
-                self.lap_times[i] = self.current_time
-
-        done = (self.collisions[self.ego_idx]) or np.all(self.toggle_list >= 4)
-
-        return bool(done), self.toggle_list >= 4
+        return done_dict
 
     @partial(jax.jit, static_argnums=[0])
     def _scan(self, state: State, key: chex.PRNGKey) -> State:

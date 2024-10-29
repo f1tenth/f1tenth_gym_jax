@@ -43,11 +43,6 @@ from jax_pf.ray_marching import get_scan
 from .collision_models import collision, collision_map, get_vertices
 
 
-@jax.jit
-def ret_orig(x, y):
-    return x
-
-
 class F110Env(MultiAgentEnv):
     """
     JAX compatible gym environment for F1TENTH
@@ -193,7 +188,7 @@ class F110Env(MultiAgentEnv):
         new_x_and_u = integrator(self.model_func, x_and_u, self.params)
         state.cartesian_states = new_x_and_u[:, :-2]
         state = jax.lax.cond(
-            self.params.produce_scans, self._scan(state), ret_orig(state)
+            self.params.produce_scans, self._scan, lambda x, y: x, state, key
         )
 
         # 2. collisions
@@ -256,7 +251,7 @@ class F110Env(MultiAgentEnv):
 
         # scan if needed
         state = jax.lax.cond(
-            self.params.produce_scans, ret_orig, self._scan, state, key
+            self.params.produce_scans, lambda x, y: x, self._scan, state, key
         )
 
         # reset winding vector

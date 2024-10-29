@@ -220,11 +220,6 @@ class F110Env(MultiAgentEnv):
 
         # TODO: keep all start line, lap information in frenet frame
 
-        # reset modes
-        self.reset_fn = make_reset_fn(
-            **self.config["reset_config"], track=self.track, num_agents=self.num_agents
-        )
-
         # scan params if produce scan
         if self.params.produce_scans:
             self.fov = self.params.fov
@@ -297,26 +292,49 @@ class F110Env(MultiAgentEnv):
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
         """Performs resetting of the environment."""
-        # TODO: reset lap counters etc
+        # reset lap counters etc
         self.num_laps = jnp.zeros((self.num_agents,), dtype=int)
         self.accumulated_angles = jnp.zeros(
             self.num_agents,
         )
-        # TODO: reset states
-        # TODO: get obs
+
+        # reset states
+        s_key, ey_key = jax.random.split(key)
+        # randomly choose first agent location [0, 1] on entire arc length
+        first_agent_s_loc = jax.random.uniform(s_key)
+        first_agent_s = first_agent_s_loc * self.track.length
+        first_agent_ey = jax.random.uniform(ey_key, minval=-0.3, maxval=0.3)
+        # set up following agents in a grid pattern
+        s_locs = jnp.linspace(
+            first_agent_s,
+            first_agent_s + 0.5 * (self.num_agents - 1),
+            self.num_agents,
+            endpoint=True,
+        )
+        ey_locs = first_agent_ey * jnp.where(
+            jnp.arange(self.num_agents) % 2 == 0, 1, -1
+        )
+        ephi_locs = jnp.zeros((self.num_agents,))
+        initial_states_frenet = jnp.column_stack((s_locs, ey_locs, ephi_locs))
+        initial_poses = self.track.vmap_frenet_to_cartesian_jax(initial_states_frenet)
+        initial_states = jnp.zeros((self.num_agents, self.state_size))
+        initial_states = initial_states.at[:, [0, 1, 4]].set(initial_poses)
 
         state = State(
             rewards=jnp.zeros((self.num_agents,)),
             done=jnp.full((self.num_agents), False),
             step=0,
-            cartesian_states=jnp.zeros((self.num_agents, self.state_size)),
-            frenet_states=jnp.zeros((self.num_agents, self.frenet_state_size)),
+            cartesian_states=initial_states,
+            frenet_states=initial_states_frenet,
             num_laps=jnp.full((self.num_agents), 0),
         )
+
+        # scan if needed
         state = jax.lax.cond(
             self.params.produce_scans, self._scan(state), ret_orig(state)
         )
 
+        # reset winding vector
         self.prev_winding_vector = (
             state.cartesian_states[:, [0, 1]] - self.winding_point
         )

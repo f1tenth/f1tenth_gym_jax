@@ -15,8 +15,7 @@ import chex
 import numpy as np
 from functools import partial
 
-from .f110_env import Param
-
+from .utils import Param
 
 @partial(jax.jit, static_argnums=[1, 2])
 def upper_accel_limit(vel, a_max, v_switch):

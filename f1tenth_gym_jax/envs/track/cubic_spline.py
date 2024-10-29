@@ -347,19 +347,12 @@ class CubicSplineND:
             return yaw
     
     def calc_yaw_jax(self, s: float) -> Optional[float]:
-        if self.psis is None: # yaw was not provided => numerical calculation
-            dx, dy = self.spline(s, 1)[:2]
-            yaw = jnp.arctan2(dy, dx)
-            # Convert yaw to [0, 2pi]
-            # yaw = yaw % (2 * jnp.pi)
-            return yaw
-        else:
-            segment = self.find_segment_for_x_jax(s)
-            cos = self.predict_with_spline_jax(s, segment, 2)[0]
-            sin = self.predict_with_spline_jax(s, segment, 3)[0]
-            yaw = jnp.arctan2(sin, cos)
-            # yaw = (jnp.arctan2(sin, cos) + 2 * jnp.pi) % (2 * jnp.pi) # Get yaw from cos,sin and convert to [0, 2pi]
-            return yaw
+        segment = self.find_segment_for_x_jax(s)
+        cos = self.predict_with_spline_jax(s, segment, 2)[0]
+        sin = self.predict_with_spline_jax(s, segment, 3)[0]
+        yaw = jnp.arctan2(sin, cos)
+        # yaw = (jnp.arctan2(sin, cos) + 2 * jnp.pi) % (2 * jnp.pi) # Get yaw from cos,sin and convert to [0, 2pi]
+        return yaw
         
     def calc_arclength(self, x: float, y: float, s_guess=0.0) -> tuple[float, float]:
         """

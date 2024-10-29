@@ -302,35 +302,35 @@ def collision_gjk(vertices1, vertices2):
     return ret
 
 
-@njit(cache=True)
-def collision_multiple(vertices):
-    """
-    Check pair-wise collisions for all provided vertices
+# @njit(cache=True)
+# def collision_multiple(vertices):
+#     """
+#     Check pair-wise collisions for all provided vertices
 
-    Args:
-        vertices (np.ndarray (num_bodies, 4, 2)): all vertices for checking pair-wise collision
+#     Args:
+#         vertices (np.ndarray (num_bodies, 4, 2)): all vertices for checking pair-wise collision
 
-    Returns:
-        collisions (np.ndarray (num_vertices, )): whether each body is in collision
-        collision_idx (np.ndarray (num_vertices, )): which index of other body is each index's body is in collision, -1 if not in collision
-    """
-    collisions = np.zeros((vertices.shape[0],))
-    collision_idx = -1 * np.ones((vertices.shape[0],))
-    # looping over all pairs
-    for i in range(vertices.shape[0] - 1):
-        for j in range(i + 1, vertices.shape[0]):
-            # check collision
-            vi = np.ascontiguousarray(vertices[i, :, :])
-            vj = np.ascontiguousarray(vertices[j, :, :])
-            ij_collision = collision(vi, vj)
-            # fill in results
-            if ij_collision:
-                collisions[i] = 1.0
-                collisions[j] = 1.0
-                collision_idx[i] = j
-                collision_idx[j] = i
+#     Returns:
+#         collisions (np.ndarray (num_vertices, )): whether each body is in collision
+#         collision_idx (np.ndarray (num_vertices, )): which index of other body is each index's body is in collision, -1 if not in collision
+#     """
+#     collisions = np.zeros((vertices.shape[0],))
+#     collision_idx = -1 * np.ones((vertices.shape[0],))
+#     # looping over all pairs
+#     for i in range(vertices.shape[0] - 1):
+#         for j in range(i + 1, vertices.shape[0]):
+#             # check collision
+#             vi = np.ascontiguousarray(vertices[i, :, :])
+#             vj = np.ascontiguousarray(vertices[j, :, :])
+#             ij_collision = collision(vi, vj)
+#             # fill in results
+#             if ij_collision:
+#                 collisions[i] = 1.0
+#                 collisions[j] = 1.0
+#                 collision_idx[i] = j
+#                 collision_idx[j] = i
 
-    return collisions, collision_idx
+#     return collisions, collision_idx
 
 
 """

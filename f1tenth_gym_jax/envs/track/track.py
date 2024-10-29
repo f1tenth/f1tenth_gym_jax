@@ -34,7 +34,12 @@ class Track:
         self,
         xs: np.ndarray,
         ys: np.ndarray,
-        velxs: np.ndarray,
+        occ_map: np.ndarray,
+        resolution: float,
+        ox: float,
+        oy: float,
+        oyaw: float,
+        velxs: np.ndarray = None,
         filepath: Optional[str] = None,
         centerline: Optional[CubicSplineND] = None,
         raceline: Optional[CubicSplineND] = None,
@@ -63,9 +68,9 @@ class Track:
         """
         self.filepath = filepath
         self.waypoints = waypoints
-        self.s_frame_max = s_frame_max
+        # self.s_frame_max = s_frame_max
 
-        assert xs.shape == ys.shape == velxs.shape, "inconsistent shapes for x, y, vel"
+        assert xs.shape == ys.shape, "inconsistent shapes for x, y"
 
         self.n = xs.shape[0]
         self.ss = ss
@@ -75,10 +80,16 @@ class Track:
         self.ks = kappas
         self.vxs = velxs
         self.axs = accxs
+        self.occ_map = occ_map
+        self.resolution = resolution
+        self.ox = ox
+        self.oy = oy
+        self.oyaw = oyaw
 
         # approximate track length by linear-interpolation of x,y waypoints
         # note: we could use 'ss' but sometimes it is normalized to [0,1], so we recompute it here
         self.length = float(np.sum(np.sqrt(np.diff(xs) ** 2 + np.diff(ys) ** 2)))
+        self.s_frame_max = self.length
 
         self.centerline = centerline or CubicSplineND(
             xs, ys, psis, kappas, velxs, accxs

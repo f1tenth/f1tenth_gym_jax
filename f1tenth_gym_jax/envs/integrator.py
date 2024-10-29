@@ -24,7 +24,7 @@ def integrate_rk4(f: Callable, x_and_u: chex.Array, params: Param) -> chex.Array
     return x_and_u
 
 
-@partial(jax.jit, static_argnums=[3, 4])
+@partial(jax.jit, static_argnums=[0, 2])
 def integrate_euler(f: Callable, x_and_u: chex.Array, params: Param) -> chex.Array:
     dstate = f(x_and_u, params)
     x_and_u = x_and_u + params.timestep * dstate

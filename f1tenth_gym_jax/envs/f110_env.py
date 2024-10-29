@@ -7,32 +7,28 @@ Author: Hongrui Zheng
 """
 
 # typing
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Dict, Tuple
 
 from .multi_agent_env import MultiAgentEnv
 from .spaces import Box
-from .spaces import Tuple as JaxMARLTuple
-from .spaces import Dict as JaxMARLDict
 
 # jax
 import jax
 import jax.numpy as jnp
 import chex
-from flax import struct
 
 # numpy scipy
 import numpy as np
 from scipy.ndimage import distance_transform_edt as edt
 
-from .track import Track
-
-# base classes
-from .base_classes import Simulator, DynamicModel
-from .observation import observation_factory, Observation
-from .reset import make_reset_fn
-
 # other
 from functools import partial
+
+# dataclasses
+from .utils import State, Param
+
+# track
+from .track import Track
 
 # dynamics
 from .dynamic_models import vehicle_dynamics_ks, vehicle_dynamics_st
@@ -47,78 +43,8 @@ from jax_pf.ray_marching import get_scan
 from .collision_models import collision, collision_map, get_vertices
 
 
-@struct.dataclass
-class State:
-    """
-    Basic Jittable state for cars
-    """
-
-    # gym stuff
-    rewards: chex.Array  # [n_agent, ]
-    done: chex.Array  # [n_agent, ]
-    step: int
-
-    # dynamic states
-    cartesian_states: (
-        chex.Array
-    )  # [n_agent, [x, y, delta, v, psi, (psi_dot, beta)]], extra states for st in ()
-    frenet_states: chex.Array  # [n_agent, [s, ey, epsi]]
-    collisions: chex.Array  # [n_agent, n_agent + 1]
-
-    # laser scans TODO: might not need to be part of the state since doesn't depend on previous
-    scans: chex.Array = None  # [n_agent, n_rays]
-
-    # race stuff
-    num_laps: chex.Array  # [n_agent, ]
-
-
-@struct.dataclass
-class Param:
-    """
-    Default jittable params for dynamics
-    """
-
-    mu: float = 1.0489  # surface friction coefficient
-    C_Sf: float = 4.718  # Cornering stiffness coefficient, front
-    C_Sr: float = 5.4562  # Cornering stiffness coefficient, rear
-    lf: float = 0.15875  # Distance from center of gravity to front axle
-    lr: float = 0.17145  # Distance from center of gravity to rear axle
-    h: float = 0.074  # Height of center of gravity
-    m: float = 3.74  # Total mass of the vehicle
-    I: float = 0.04712  # Moment of inertial of the entire vehicle about the z axis
-    s_min: float = -0.4189  # Minimum steering angle constraint
-    s_max: float = 0.4189  # Maximum steering angle constraint
-    sv_min: float = -3.2  # Minimum steering velocity constraint
-    sv_max: float = 3.2  # Maximum steering velocity constraint
-    v_switch: float = (
-        7.319  # Switching velocity (velocity at which the acceleration is no longer able to #spin)
-    )
-    a_max: float = 9.51  # Maximum longitudinal acceleration
-    v_min: float = -5.0  # Minimum longitudinal velocity
-    v_max: float = 20.0  # Maximum longitudinal velocity
-    width: float = 0.31  # width of the vehicle in meters
-    length: float = 0.58  # length of the vehicle in meters
-    timestep: float = 0.01  # physical time steps of the dynamics model
-    longitudinal_action_type: str = "acceleration"  # speed or acceleration
-    steering_action_type: str = (
-        "steering_velocity"  # steering_angle or steering_velocity
-    )
-    integrator: str = "rk4"  # dynamics integrator
-    model: str = "st"  # dynamics model type
-    produce_scans: bool = False  # whether to turn on laser scan
-    theta_dis: int = 2000  # number of discretization in theta, scan param
-    fov: float = 4.7  # field of view of the scan, scan param
-    num_beams: int = 64  # number of beams in each scan, scan param
-    eps: float = 0.01  # epsilon to stop ray marching, scan param
-    max_range: float = 10.0  # max range of scan, scan param
-    observe_others: bool = True  # whether can observe other agents
-    num_rays: float = 1000  # number of rays in each scan
-    map_name: str = "Spielberg"  # map for environment
-    max_num_laps: int = 1  # maximum number of laps to run before done
-
-
 @jax.jit
-def ret_orig(x):
+def ret_orig(x, y):
     return x
 
 
@@ -135,7 +61,7 @@ class F110Env(MultiAgentEnv):
     """
 
     def __init__(self, num_agents: int = 1, params: Param = Param(), **kwargs):
-        super().__init__()
+        super().__init__(num_agents=num_agents)
         self.params = params
         # agents
         self.num_agents = num_agents
@@ -187,7 +113,7 @@ class F110Env(MultiAgentEnv):
             i: Box(
                 -jnp.inf,
                 jnp.inf,
-                (self.state_size + self.all_others_state_size + self.scan_size,),
+                (self.state_size + self.all_other_state_size + self.scan_size,),
             )
             for i in self.agents
         }
@@ -198,9 +124,7 @@ class F110Env(MultiAgentEnv):
             ),
             "scan": list(
                 range(
-                    self.state_size,
                     self.state_size + self.all_other_state_size,
-                    self.state_size,
                     self.state_size + self.all_other_state_size + self.scan_size,
                 )
             ),
@@ -210,9 +134,9 @@ class F110Env(MultiAgentEnv):
         self.track = Track.from_track_name(params.map_name)
 
         # get a interior point of track as winding number looking point
-        start_point_curvature = self.track.calc_curvature_jax(0.0)
-        self.winding_point = self.track.frenet_to_cartesian_jax(
-            s=0.0, ey=jnp.sign(start_point_curvature) * 1.5
+        start_point_curvature = self.track.centerline.calc_curvature(0.0)
+        self.winding_point = self.track.frenet_to_cartesian(
+            s=0.0, ey=np.sign(start_point_curvature) * 1.5, ephi=0.0
         )
 
         # set pixel centers of occupancy map
@@ -327,11 +251,12 @@ class F110Env(MultiAgentEnv):
             cartesian_states=initial_states,
             frenet_states=initial_states_frenet,
             num_laps=jnp.full((self.num_agents), 0),
+            collisions=jnp.zeros((self.num_agents,), dtype=bool),
         )
 
         # scan if needed
         state = jax.lax.cond(
-            self.params.produce_scans, self._scan(state), ret_orig(state)
+            self.params.produce_scans, ret_orig, self._scan, state, key
         )
 
         # reset winding vector
@@ -361,7 +286,7 @@ class F110Env(MultiAgentEnv):
                 state.cartesian_states[jnp.delete(jnp.arange(num_agents), agent_ind)][
                     [0, 1, 3, 4]
                 ]
-                - agent_state,
+                - agent_state[0, 1, 3, 4],
                 jnp.zeros((0,)),
             )
 
@@ -422,8 +347,8 @@ class F110Env(MultiAgentEnv):
         )
         scans = get_scan_vmapped(state.cartesian_states[:, [0, 1, 4]])
         noise = jax.random.normal(key, scans.shape) * 0.01
-        state.scans = scans + noise
-        return state
+        new_state = state.replace(scans=scans + noise)
+        return new_state
 
     @partial(jax.jit, static_argnums=[0])
     def _collisions(self, state: State) -> State:

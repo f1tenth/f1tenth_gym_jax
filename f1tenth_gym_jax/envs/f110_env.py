@@ -20,8 +20,9 @@ import jax.numpy as jnp
 import chex
 from flax import struct
 
-# numpy
+# numpy scipy
 import numpy as np
+from scipy.ndimage import distance_transform_edt as edt
 
 from .track import Track
 
@@ -40,6 +41,7 @@ from .dynamic_models import vehicle_dynamics_ks, vehicle_dynamics_st
 from .integrator import integrate_euler, integrate_rk4
 
 # scanning
+from jax_pf.ray_marching import get_scan
 
 # collisions
 from .collision_models import collision, collision_map, get_vertices
@@ -104,6 +106,11 @@ class Param:
     integrator: str = "rk4"  # dynamics integrator
     model: str = "st"  # dynamics model type
     produce_scans: bool = False  # whether to turn on laser scan
+    theta_dis: int = 2000  # number of discretization in theta, scan param
+    fov: float = 4.7  # field of view of the scan, scan param
+    num_beams: int = 64  # number of beams in each scan, scan param
+    eps: float = 0.01  # epsilon to stop ray marching, scan param
+    max_range: float = 10.0  # max range of scan, scan param
     observe_others: bool = True  # whether can observe other agents
     num_rays: float = 1000  # number of rays in each scan
     map_name: str = "Spielberg"  # map for environment
@@ -218,65 +225,27 @@ class F110Env(MultiAgentEnv):
             **self.config["reset_config"], track=self.track, num_agents=self.num_agents
         )
 
-        # # start line info TODO: check if still needed
-        # self.start_xs = np.zeros((self.num_agents,))
-        # self.start_ys = np.zeros((self.num_agents,))
-        # self.start_thetas = np.zeros((self.num_agents,))
-        # self.start_rot = np.eye(2)
-        # # initiate stuff
-        # self.sim = Simulator(
-        #     self.params,
-        #     self.num_agents,
-        #     self.seed,
-        #     time_step=self.timestep,
-        #     integrator=self.integrator,
-        #     model=self.model,
-        #     action_type=self.action_type,
-        # )
-        # self.sim.set_map(self.map)
+        # scan params if produce scan
+        if self.params.produce_scans:
+            self.fov = self.params.fov
+            self.num_beams = self.params.num_beams
+            self.theta_dis = self.params.theta_dis
+            self.eps = self.params.eps
+            self.max_range = self.params.max_range
 
-        # # observations
-        # self.agent_ids = [f"agent_{i}" for i in range(self.num_agents)]
+            angle_increment = self.fov / (self.num_beams - 1)
+            self.theta_index_increment = self.theta_dis * angle_increment / (2 * np.pi)
+            theta_arr = jnp.linspace(0.0, 2 * jnp.pi, num=self.theta_dis)
+            self.scan_sines = jnp.sin(theta_arr)
+            self.scan_cosines = jnp.cos(theta_arr)
 
-        # assert (
-        #     "type" in self.observation_config
-        # ), "observation_config must contain 'type' key"
-        # self.observation_type = observation_factory(env=self, **self.observation_config)
-        # self.observation_space = self.observation_type.space()
-
-        # # action space
-        # self.action_space = from_single_to_multi_action_space(
-        #     self.action_type.space, self.num_agents
-        # )
-
-    # @partial(jax.jit, static_argnums=(0,))
-    # def step(
-    #     self,
-    #     key: chex.PRNGKey,
-    #     state: State,
-    #     actions: Dict[str, chex.Array],
-    #     reset_state: Optional[State] = None,
-    # ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
-    #     """Performs step transitions in the environment. Resets the environment if done.
-    #     To control the reset state, pass `reset_state`. Otherwise, the environment will reset randomly."""
-
-    #     key, key_reset = jax.random.split(key)
-    #     obs_st, states_st, rewards, dones, infos = self.step_env(key, state, actions)
-
-    #     if reset_state is None:
-    #         obs_re, states_re = self.reset(key_reset)
-    #     else:
-    #         states_re = reset_state
-    #         obs_re = self.get_obs(states_re)
-
-    #     # Auto-reset environment based on termination
-    #     states = jax.tree_map(
-    #         lambda x, y: jax.lax.select(dones["__all__"], x, y), states_re, states_st
-    #     )
-    #     obs = jax.tree_map(
-    #         lambda x, y: jax.lax.select(dones["__all__"], x, y), obs_re, obs_st
-    #     )
-    #     return obs, states, rewards, dones, infos
+            self.distance_transform = edt(self.track.occ_map) * self.track.resolution
+            self.height, self.width = self.track.occ_map.shape
+            self.resolution = self.track.resolution
+            self.orig_x = self.track.ox
+            self.orig_y = self.track.oy
+            self.orig_c = jnp.cos(self.track.oyaw)
+            self.orig_s = jnp.sin(self.track.oyaw)
 
     def _set_pixelcenters(self):
         map_img = self.track.occ_map
@@ -348,7 +317,9 @@ class F110Env(MultiAgentEnv):
             self.params.produce_scans, self._scan(state), ret_orig(state)
         )
 
-        self.prev_winding_vector = state.cartesian_states[:, [0, 1]] - self.winding_point
+        self.prev_winding_vector = (
+            state.cartesian_states[:, [0, 1]] - self.winding_point
+        )
         return self.get_obs(state), state
 
     @partial(jax.jit, static_argnums=[0])
@@ -382,27 +353,58 @@ class F110Env(MultiAgentEnv):
         return {a: observation(i, self.num_agents) for i, a in enumerate(self.agents)}
 
     @partial(jax.jit, static_argnums=[0])
-    def check_done(self, state: State) -> Dict[str, bool]:
-        # TODO: check current s, ey
-        s, ey, ephi = self.track.vmap_cartesian_to_frenet_jax(
-            state.cartesian_states[:, [0, 1, 4]]
-        )
-        s_diff = s - self.starting_line_s
-        self.num_laps = self.num_laps + jnp.floor(s_diff / self.track.length)
-
-        laps_done = self.num_laps >= self.max_num_laps
+    def check_done(self, state: State) -> Tuple[Dict[str, bool], State]:
 
         winding_vector = state.cartesian_states[:, [0, 1]] - self.winding_point
+
+        # angle differentials, from new winding vectors to previous winding vectors
+        winding_angles = jnp.arctan2(
+            jnp.cross(winding_vector, self.prev_winding_vector),
+            jnp.einsum("ij,ij->i", winding_vector, self.prev_winding_vector),
+        )
+
+        self.accumulated_angles = self.accumulated_angles + winding_angles
+        self.num_laps = jnp.abs(self.accumulated_angles) / (2 * jnp.pi)
+        laps_done = self.num_laps >= self.max_num_laps
 
         # collision dones
         done_dict = {
             i: (state.collisions[i] or laps_done[i]) for i in range(self.num_agents)
         }
 
-        return done_dict
+        # update state
+        state.num_laps = self.num_laps
+        state.done = jnp.array([done_dict[a] for a in self.agents])
+
+        return done_dict, state
 
     @partial(jax.jit, static_argnums=[0])
     def _scan(self, state: State, key: chex.PRNGKey) -> State:
+        get_scan_vmapped = jax.vmap(
+            partial(
+                get_scan,
+                theta_dis=self.theta_dis,
+                fov=self.fov,
+                num_beams=self.num_beams,
+                theta_index_increment=self.theta_index_increment,
+                sines=self.scan_sines,
+                cosines=self.scan_cosines,
+                eps=self.eps,
+                orig_x=self.orig_x,
+                orig_y=self.orig_y,
+                orig_c=self.orig_c,
+                orig_s=self.orig_s,
+                height=self.height,
+                width=self.width,
+                resolution=self.resolution,
+                dt=self.distance_transform,
+                max_range=self.max_range,
+            ),
+            in_axes=[0],
+        )
+        scans = get_scan_vmapped(state.cartesian_states[:, [0, 1, 4]])
+        noise = jax.random.normal(key, scans.shape) * 0.01
+        state.scans = scans + noise
         return state
 
     @partial(jax.jit, static_argnums=[0])

@@ -21,6 +21,7 @@ class Track:
     resolution: float
     ox: float
     oy: float
+    oyaw: float
     centerline: CubicSplineND
     raceline: CubicSplineND
     filepath: Optional[str]
@@ -96,6 +97,7 @@ class Track:
         resolution = map_metadata["resolution"]
         ox = map_metadata["origin"][0]
         oy = map_metadata["origin"][1]
+        oyaw = map_metadata["origin"][2]
 
         # load occupancy grid
         map_filename = pathlib.Path(map_metadata["image"])
@@ -151,6 +153,7 @@ class Track:
             resolution=resolution,
             ox=ox,
             oy=oy,
+            oyaw=oyaw,
         )
 
     @staticmethod

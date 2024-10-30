@@ -379,15 +379,15 @@ def get_vertices(pose, length, width):
         vertices (np.ndarray, (4, 2)): corner vertices of the vehicle body
     """
     H = get_trmtx(pose)
-    rl = H.dot(np.asarray([[-length / 2], [width / 2], [0.0], [1.0]])).flatten()
-    rr = H.dot(np.asarray([[-length / 2], [-width / 2], [0.0], [1.0]])).flatten()
-    fl = H.dot(np.asarray([[length / 2], [width / 2], [0.0], [1.0]])).flatten()
-    fr = H.dot(np.asarray([[length / 2], [-width / 2], [0.0], [1.0]])).flatten()
+    rl = H.dot(jnp.asarray([[-length / 2], [width / 2], [0.0], [1.0]])).flatten()
+    rr = H.dot(jnp.asarray([[-length / 2], [-width / 2], [0.0], [1.0]])).flatten()
+    fl = H.dot(jnp.asarray([[length / 2], [width / 2], [0.0], [1.0]])).flatten()
+    fr = H.dot(jnp.asarray([[length / 2], [-width / 2], [0.0], [1.0]])).flatten()
     rl = rl / rl[3]
     rr = rr / rr[3]
     fl = fl / fl[3]
     fr = fr / fr[3]
-    vertices = np.asarray(
+    vertices = jnp.asarray(
         [[rl[0], rl[1]], [rr[0], rr[1]], [fr[0], fr[1]], [fl[0], fl[1]]]
     )
     return vertices

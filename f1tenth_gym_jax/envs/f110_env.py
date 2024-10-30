@@ -130,9 +130,11 @@ class F110Env(MultiAgentEnv):
 
         # get a interior point of track as winding number looking point
         start_point_curvature = self.track.centerline.calc_curvature(0.0)
-        self.winding_point = self.track.frenet_to_cartesian(
-            s=0.0, ey=np.sign(start_point_curvature) * 1.5, ephi=0.0
-        )
+        self.winding_point = jnp.array(
+            self.track.frenet_to_cartesian(
+                s=0.0, ey=np.sign(start_point_curvature) * 1.5, ephi=0.0
+            )
+        )[:2]
 
         # set pixel centers of occupancy map
         self._set_pixelcenters()
@@ -184,11 +186,11 @@ class F110Env(MultiAgentEnv):
         us = jnp.array([actions[i] for i in self.agents])
         x_and_u = jnp.hstack((x, us))
         # integrate dynamics, vmapped
-        integrator = jax.vmap(self.integrator_func, in_axes=[0])
+        integrator = jax.vmap(self.integrator_func, in_axes=[None, 0, None])
         new_x_and_u = integrator(self.model_func, x_and_u, self.params)
-        state.cartesian_states = new_x_and_u[:, :-2]
+        state = state.replace(cartesian_states=new_x_and_u[:, :-2])
         state = jax.lax.cond(
-            self.params.produce_scans, self._scan, lambda x, y: x, state, key
+            self.params.produce_scans, self._scan, self._ret_orig_state, state, key
         )
 
         # 2. collisions
@@ -198,10 +200,10 @@ class F110Env(MultiAgentEnv):
         obs = self.get_obs(state)
 
         # 3. dones
-        dones = self.check_dones(state)
+        dones = self.check_done(state)
 
         # 4. rewards
-        rewards = self.get_rewards(state)
+        rewards = self.get_reward(state)
 
         # 5. info
         infos = {}
@@ -212,10 +214,10 @@ class F110Env(MultiAgentEnv):
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
         """Performs resetting of the environment."""
         # reset lap counters etc
-        self.num_laps = jnp.zeros((self.num_agents,), dtype=int)
-        self.accumulated_angles = jnp.zeros(
-            self.num_agents,
-        )
+        # self.num_laps = jnp.zeros((self.num_agents,), dtype=int)
+        # self.accumulated_angles = jnp.zeros(
+        #     self.num_agents,
+        # )
 
         # reset states
         s_key, ey_key = jax.random.split(key)
@@ -247,17 +249,20 @@ class F110Env(MultiAgentEnv):
             frenet_states=initial_states_frenet,
             num_laps=jnp.full((self.num_agents), 0),
             collisions=jnp.zeros((self.num_agents,), dtype=bool),
+            scans=jnp.zeros((self.num_agents, self.num_beams)),
+            prev_winding_vector=jnp.zeros((self.num_agents, 2)),
+            accumulated_angles=jnp.zeros((self.num_agents, 1)),
         )
 
         # scan if needed
         state = jax.lax.cond(
-            self.params.produce_scans, lambda x, y: x, self._scan, state, key
+            self.params.produce_scans, self._scan, self._ret_orig_state, state, key
         )
 
         # reset winding vector
-        self.prev_winding_vector = (
+        state = state.replace(prev_winding_vector = (
             state.cartesian_states[:, [0, 1]] - self.winding_point
-        )
+        ))
         return self.get_obs(state), state
 
     @partial(jax.jit, static_argnums=[0])
@@ -266,24 +271,31 @@ class F110Env(MultiAgentEnv):
 
         @partial(jax.jit, static_argnums=[1])
         def observation(agent_ind, num_agents):
-            # extract scan if exist
-            agent_scan = jax.lax.select(
-                state.scans is not None, state.scans[agent_ind, :], jnp.zeros((0,))
-            )
+            # extract scan
+            agent_scan = state.scans[agent_ind, :]
 
             # extract states
             agent_state = state.cartesian_states[agent_ind, :]
 
             # extract relative states
             # (relative_x, relative_y, longitudinal_v, relative_psi)
-            relative_states = jax.lax.select(
-                num_agents > 1,
-                state.cartesian_states[jnp.delete(jnp.arange(num_agents), agent_ind)][
-                    [0, 1, 3, 4]
-                ]
-                - agent_state[0, 1, 3, 4],
-                jnp.zeros((0,)),
+            # this should automatically deal with only one agent
+            other_agent_indices = jnp.delete(
+                jnp.arange(num_agents), agent_ind, assume_unique_indices=True
             )
+            other_agent_poses = state.cartesian_states[other_agent_indices, :][
+                :, jnp.array([0, 1, 4])
+            ]
+            relative_poses = other_agent_poses - agent_state[jnp.array([0, 1, 4])]
+            other_agent_velocities = state.cartesian_states[other_agent_indices, 3]
+            relative_states = jnp.column_stack(
+                (
+                    relative_poses[:, 0],
+                    relative_poses[:, 1],
+                    other_agent_velocities,
+                    relative_poses[:, 2],
+                )
+            ).flatten()
 
             all_states = jnp.hstack((agent_state, relative_states, agent_scan))
             return all_states
@@ -297,24 +309,34 @@ class F110Env(MultiAgentEnv):
 
         # angle differentials, from new winding vectors to previous winding vectors
         winding_angles = jnp.arctan2(
-            jnp.cross(winding_vector, self.prev_winding_vector),
-            jnp.einsum("ij,ij->i", winding_vector, self.prev_winding_vector),
+            jnp.cross(winding_vector, state.prev_winding_vector),
+            jnp.einsum("ij,ij->i", winding_vector, state.prev_winding_vector),
         )
 
-        self.accumulated_angles = self.accumulated_angles + winding_angles
-        self.num_laps = jnp.abs(self.accumulated_angles) / (2 * jnp.pi)
-        laps_done = self.num_laps >= self.max_num_laps
+        state = state.replace(accumulated_angles = state.accumulated_angles + winding_angles)
+        state = state.replace(num_laps = jnp.abs(state.accumulated_angles) / (2 * jnp.pi))
+        laps_done = state.num_laps >= self.params.max_num_laps
 
         # collision dones
         done_dict = {
-            i: (state.collisions[i] or laps_done[i]) for i in range(self.num_agents)
+            a: jnp.logical_or(state.collisions[i], laps_done[i]) for i, a in enumerate(self.agents)
         }
 
         # update state
-        state.num_laps = self.num_laps
-        state.done = jnp.array([done_dict[a] for a in self.agents])
+        state = state.replace(done = jnp.array([done_dict[a] for a in self.agents]))
 
         return done_dict, state
+    
+    @partial(jax.jit, static_argnums=[0])
+    def get_reward(self, state: State) -> Dict[str, float]:
+        def reward(i):
+            return 0.0
+        return {a: reward(i) for i, a in enumerate(self.agents)}
+
+    @partial(jax.jit, static_argnums=[0])
+    def _ret_orig_state(self, state: State, key: chex.PRNGKey) -> State:
+        new_state = state.replace(scans=jnp.zeros((self.num_agents, self.num_beams)))
+        return new_state
 
     @partial(jax.jit, static_argnums=[0])
     def _scan(self, state: State, key: chex.PRNGKey) -> State:
@@ -363,22 +385,20 @@ class F110Env(MultiAgentEnv):
 
         # get indices that are colliding
         collided_ind = jax.lax.select(
-            pairwise_collisions,
-            jnp.column_stack(pairwise_indices1, pairwise_indices2),
-            -1 * jnp.ones((len(pairwise_indices1), 2)),
+            jnp.column_stack((pairwise_collisions, pairwise_collisions)),
+            jnp.column_stack((pairwise_indices1, pairwise_indices2)),
+            -1 * jnp.ones((len(pairwise_indices1), 2), dtype=int),
         ).flatten()
         padded_collisions = jnp.zeros((self.num_agents + 1,))
         padded_collisions.at[collided_ind].set(1)
         padded_collisions = padded_collisions[:-1]
 
         # check map collisions (n_agent, )
-        map_collisions = collision_map(
-            state.cartesian_states[:, [0, 1, 4]], self.pixel_centers
-        )
+        map_collisions = collision_map(all_vertices, self.pixel_centers)
 
         # combine collisions
         full_collisions = jnp.logical_or(padded_collisions, map_collisions)
 
         # update state
-        state.collisions = full_collisions
+        state = state.replace(collisions = full_collisions)
         return state

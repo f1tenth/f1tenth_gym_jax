@@ -17,6 +17,7 @@ from functools import partial
 
 from .utils import Param
 
+
 @partial(jax.jit, static_argnums=[1, 2])
 def upper_accel_limit(vel, a_max, v_switch):
     """
@@ -68,7 +69,10 @@ def accl_constraints(vel, a_long_d, v_switch, a_max, v_min, v_max):
 
     a_long = jnp.select(
         [
-            ((vel <= v_min and a_long_d <= 0) or (vel >= v_max and a_long_d >= 0)),
+            jnp.logical_or(
+                jnp.logical_and(vel <= v_min, a_long_d <= 0),
+                jnp.logical_and(vel >= v_max, a_long_d >= 0),
+            ),
             (a_long_d <= -a_max),
             (a_long_d >= uac),
         ],
@@ -110,9 +114,9 @@ def steering_constraint(
 
     steering_velocity = jnp.select(
         [
-            (
-                (steering_angle <= s_min and steering_velocity <= 0)
-                or (steering_angle >= s_max and steering_velocity >= 0)
+            jnp.logical_or(
+                jnp.logical_and(steering_angle <= s_min, steering_velocity <= 0),
+                jnp.logical_and(steering_angle >= s_max, steering_velocity >= 0),
             ),
             (steering_velocity <= sv_min),
             (steering_velocity >= sv_max),
@@ -236,7 +240,7 @@ def vehicle_dynamics_st(x_and_u: chex.Array, params: Param) -> chex.Array:
     PSI_DOT = x_and_u[5]
     BETA = x_and_u[6]
     # We have to wrap the slip angle to [-pi, pi]
-    # BETA = np.arctan2(np.sin(BETA), np.cos(BETA))
+    # BETA = jnp.arctan2(jnp.sin(BETA), jnp.cos(BETA))
 
     # gravity constant m/s^2
     g = 9.81
@@ -252,24 +256,24 @@ def vehicle_dynamics_st(x_and_u: chex.Array, params: Param) -> chex.Array:
     # switch to kinematic model for small velocities
     # wheelbase
     lwb = params.lf + params.lr
-    BETA_HAT = np.arctan(np.tan(DELTA) * params.lr / lwb)
+    BETA_HAT = jnp.arctan(jnp.tan(DELTA) * params.lr / lwb)
     BETA_DOT = (
-        (1 / (1 + (np.tan(DELTA) * (params.lr / lwb)) ** 2))
-        * (params.lr / (lwb * np.cos(DELTA) ** 2))
+        (1 / (1 + (jnp.tan(DELTA) * (params.lr / lwb)) ** 2))
+        * (params.lr / (lwb * jnp.cos(DELTA) ** 2))
         * STEER_VEL
     )
-    f_ks = np.array(
+    f_ks = jnp.array(
         [
-            V * np.cos(PSI + BETA_HAT),  # X_DOT
-            V * np.sin(PSI + BETA_HAT),  # Y_DOT
+            V * jnp.cos(PSI + BETA_HAT),  # X_DOT
+            V * jnp.sin(PSI + BETA_HAT),  # Y_DOT
             STEER_VEL,  # DELTA_DOT
             ACCL,  # V_DOT
-            V * np.cos(BETA_HAT) * np.tan(DELTA) / lwb,  # PSI_DOT
+            V * jnp.cos(BETA_HAT) * jnp.tan(DELTA) / lwb,  # PSI_DOT
             (1 / lwb)
             * (
-                ACCL * np.cos(BETA) * np.tan(DELTA)
-                - V * np.sin(BETA) * np.tan(DELTA) * BETA_DOT
-                + ((V * np.cos(BETA) * STEER_VEL) / (np.cos(DELTA) ** 2))
+                ACCL * jnp.cos(BETA) * jnp.tan(DELTA)
+                - V * jnp.sin(BETA) * jnp.tan(DELTA) * BETA_DOT
+                + ((V * jnp.cos(BETA) * STEER_VEL) / (jnp.cos(DELTA) ** 2))
             ),  # PSI_DOT_DOT
             BETA_DOT,  # BETA_DOT
             0.0,  # dummy dim
@@ -278,10 +282,10 @@ def vehicle_dynamics_st(x_and_u: chex.Array, params: Param) -> chex.Array:
     )
 
     # single track (higher speed) system dynamics
-    f = np.array(
+    f = jnp.array(
         [
-            V * np.cos(PSI + BETA),  # X_DOT
-            V * np.sin(PSI + BETA),  # Y_DOT
+            V * jnp.cos(PSI + BETA),  # X_DOT
+            V * jnp.sin(PSI + BETA),  # Y_DOT
             STEER_VEL,  # DELTA_DOT
             ACCL,  # V_DOT
             PSI_DOT,  # PSI_DOT

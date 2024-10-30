@@ -49,7 +49,11 @@ class State:
     num_laps: chex.Array  # [n_agent, ]
     
     # laser scans TODO: might not need to be part of the state since doesn't depend on previous
-    scans: chex.Array = None  # [n_agent, n_rays]
+    scans: chex.Array  # [n_agent, n_rays]
+
+    # winding vector
+    prev_winding_vector: chex.Array  # [n_agent, 2]
+    accumulated_angles: chex.Array # [n_agent, 1]
 
     
 

@@ -200,7 +200,8 @@ class F110Env(MultiAgentEnv):
         obs = self.get_obs(state)
 
         # 3. dones
-        dones = self.check_done(state)
+        dones, state = self.check_done(state)
+        dones.update({"__all__": jnp.all(state.done)})
 
         # 4. rewards
         rewards = self.get_reward(state)
@@ -213,11 +214,6 @@ class F110Env(MultiAgentEnv):
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
         """Performs resetting of the environment."""
-        # reset lap counters etc
-        # self.num_laps = jnp.zeros((self.num_agents,), dtype=int)
-        # self.accumulated_angles = jnp.zeros(
-        #     self.num_agents,
-        # )
 
         # reset states
         s_key, ey_key = jax.random.split(key)
@@ -323,7 +319,7 @@ class F110Env(MultiAgentEnv):
         }
 
         # update state
-        state = state.replace(done = jnp.array([done_dict[a] for a in self.agents]))
+        state = state.replace(done = jnp.logical_or(state.collisions, laps_done))
 
         return done_dict, state
     

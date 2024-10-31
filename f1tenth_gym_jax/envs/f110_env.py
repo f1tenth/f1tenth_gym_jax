@@ -89,7 +89,8 @@ class F110Env(MultiAgentEnv):
             )
 
         # spaces
-        self.action_spaces = {i: Box(-jnp.inf, jnp.inf, (2,)) for i in self.agents}
+        # TODO: this is now bounded by maximum acceleration
+        self.action_spaces = {i: Box(-self.params.a_max, self.params.a_max, (2,)) for i in self.agents}
 
         # scanning or not
         if params.produce_scans:
@@ -142,26 +143,26 @@ class F110Env(MultiAgentEnv):
         # TODO: keep all start line, lap information in frenet frame
 
         # scan params if produce scan
-        if self.params.produce_scans:
-            self.fov = self.params.fov
-            self.num_beams = self.params.num_beams
-            self.theta_dis = self.params.theta_dis
-            self.eps = self.params.eps
-            self.max_range = self.params.max_range
+        # if self.params.produce_scans:
+        self.fov = self.params.fov
+        self.num_beams = self.params.num_beams
+        self.theta_dis = self.params.theta_dis
+        self.eps = self.params.eps
+        self.max_range = self.params.max_range
 
-            angle_increment = self.fov / (self.num_beams - 1)
-            self.theta_index_increment = self.theta_dis * angle_increment / (2 * np.pi)
-            theta_arr = jnp.linspace(0.0, 2 * jnp.pi, num=self.theta_dis)
-            self.scan_sines = jnp.sin(theta_arr)
-            self.scan_cosines = jnp.cos(theta_arr)
+        angle_increment = self.fov / (self.num_beams - 1)
+        self.theta_index_increment = self.theta_dis * angle_increment / (2 * np.pi)
+        theta_arr = jnp.linspace(0.0, 2 * jnp.pi, num=self.theta_dis)
+        self.scan_sines = jnp.sin(theta_arr)
+        self.scan_cosines = jnp.cos(theta_arr)
 
-            self.distance_transform = edt(self.track.occ_map) * self.track.resolution
-            self.height, self.width = self.track.occ_map.shape
-            self.resolution = self.track.resolution
-            self.orig_x = self.track.ox
-            self.orig_y = self.track.oy
-            self.orig_c = jnp.cos(self.track.oyaw)
-            self.orig_s = jnp.sin(self.track.oyaw)
+        self.distance_transform = edt(self.track.occ_map) * self.track.resolution
+        self.height, self.width = self.track.occ_map.shape
+        self.resolution = self.track.resolution
+        self.orig_x = self.track.ox
+        self.orig_y = self.track.oy
+        self.orig_c = jnp.cos(self.track.oyaw)
+        self.orig_s = jnp.sin(self.track.oyaw)
 
     def _set_pixelcenters(self):
         map_img = self.track.occ_map
@@ -247,7 +248,7 @@ class F110Env(MultiAgentEnv):
             collisions=jnp.zeros((self.num_agents,), dtype=bool),
             scans=jnp.zeros((self.num_agents, self.num_beams)),
             prev_winding_vector=jnp.zeros((self.num_agents, 2)),
-            accumulated_angles=jnp.zeros((self.num_agents, 1)),
+            accumulated_angles=jnp.zeros((self.num_agents,)),
         )
 
         # scan if needed
@@ -310,7 +311,7 @@ class F110Env(MultiAgentEnv):
         )
 
         state = state.replace(accumulated_angles = state.accumulated_angles + winding_angles)
-        state = state.replace(num_laps = jnp.abs(state.accumulated_angles) / (2 * jnp.pi))
+        state = state.replace(num_laps = (jnp.abs(state.accumulated_angles) / (2 * jnp.pi)).astype(int))
         laps_done = state.num_laps >= self.params.max_num_laps
 
         # collision dones
@@ -320,6 +321,7 @@ class F110Env(MultiAgentEnv):
 
         # update state
         state = state.replace(done = jnp.logical_or(state.collisions, laps_done))
+        state = state.replace(prev_winding_vector = winding_vector)
 
         return done_dict, state
     

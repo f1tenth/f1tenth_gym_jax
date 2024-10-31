@@ -235,7 +235,7 @@ def vehicle_dynamics_st(x_and_u: chex.Array, params: Param) -> chex.Array:
     X = x_and_u[0]
     Y = x_and_u[1]
     DELTA = x_and_u[2]
-    V = x_and_u[3]
+    V = x_and_u[3] + 0.001
     PSI = x_and_u[4]
     PSI_DOT = x_and_u[5]
     BETA = x_and_u[6]

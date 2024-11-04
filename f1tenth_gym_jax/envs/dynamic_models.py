@@ -194,9 +194,8 @@ def vehicle_dynamics_ks(x_and_u: chex.Array, params: Param) -> chex.Array:
     )
     return f
 
-
 @partial(jax.jit, static_argnums=[1])
-def vehicle_dynamics_st(x_and_u: chex.Array, params: Param) -> chex.Array:
+def vehicle_dynamics_st_switching(x_and_u: chex.Array, params: Param) -> chex.Array:
     """
     Single Track Vehicle Dynamics.
     From https://gitlab.lrz.de/tum-cps/commonroad-vehicle-models/-/blob/master/vehicleModels_commonRoad.pdf, section 7
@@ -235,7 +234,146 @@ def vehicle_dynamics_st(x_and_u: chex.Array, params: Param) -> chex.Array:
     X = x_and_u[0]
     Y = x_and_u[1]
     DELTA = x_and_u[2]
-    V = x_and_u[3] + 0.001
+    V = jnp.clip(x_and_u[3], min=0.001)
+    PSI = x_and_u[4]
+    PSI_DOT = x_and_u[5]
+    BETA = x_and_u[6]
+    # We have to wrap the slip angle to [-pi, pi]
+    # BETA = jnp.arctan2(jnp.sin(BETA), jnp.cos(BETA))
+
+    # gravity constant m/s^2
+    g = 9.81
+
+    # Controls w/ constraints
+    STEER_VEL = steering_constraint(
+        DELTA, x_and_u[7], params.s_min, params.s_max, params.sv_min, params.sv_max
+    )
+    ACCL = accl_constraints(
+        V, x_and_u[8], params.v_switch, params.a_max, params.v_min, params.v_max
+    )
+
+    # switch to kinematic model for small velocities
+    # wheelbase
+    lwb = params.lf + params.lr
+    BETA_HAT = jnp.arctan(jnp.tan(DELTA) * params.lr / lwb)
+    BETA_DOT = (
+        (1 / (1 + (jnp.tan(DELTA) * (params.lr / lwb)) ** 2))
+        * (params.lr / (lwb * jnp.cos(DELTA) ** 2))
+        * STEER_VEL
+    )
+    f_ks = jnp.array(
+        [
+            V * jnp.cos(PSI + BETA_HAT),  # X_DOT
+            V * jnp.sin(PSI + BETA_HAT),  # Y_DOT
+            STEER_VEL,  # DELTA_DOT
+            ACCL,  # V_DOT
+            V * jnp.cos(BETA_HAT) * jnp.tan(DELTA) / lwb,  # PSI_DOT
+            (1 / lwb)
+            * (
+                ACCL * jnp.cos(BETA) * jnp.tan(DELTA)
+                - V * jnp.sin(BETA) * jnp.tan(DELTA) * BETA_DOT
+                + ((V * jnp.cos(BETA) * STEER_VEL) / (jnp.cos(DELTA) ** 2))
+            ),  # PSI_DOT_DOT
+            BETA_DOT,  # BETA_DOT
+            0.0,  # dummy dim
+            0.0,  # dummy dim
+        ]
+    )
+
+    # single track (higher speed) system dynamics
+    f = jnp.array(
+        [
+            V * jnp.cos(PSI + BETA),  # X_DOT
+            V * jnp.sin(PSI + BETA),  # Y_DOT
+            STEER_VEL,  # DELTA_DOT
+            ACCL,  # V_DOT
+            PSI_DOT,  # PSI_DOT
+            ((params.mu * params.m) / (params.I * (params.lf + params.lr)))
+            * (
+                params.lf * params.C_Sf * (g * params.lr - ACCL * params.h) * DELTA
+                + (
+                    params.lr * params.C_Sr * (g * params.lf + ACCL * params.h)
+                    - params.lf * params.C_Sf * (g * params.lr - ACCL * params.h)
+                )
+                * BETA
+                - (
+                    params.lf
+                    * params.lf
+                    * params.C_Sf
+                    * (g * params.lr - ACCL * params.h)
+                    + params.lr
+                    * params.lr
+                    * params.C_Sr
+                    * (g * params.lf + ACCL * params.h)
+                )
+                * (PSI_DOT / V)
+            ),  # PSI_DOT_DOT
+            (params.mu / (V * (params.lr + params.lf)))
+            * (
+                params.C_Sf * (g * params.lr - ACCL * params.h) * DELTA
+                - (
+                    params.C_Sr * (g * params.lf + ACCL * params.h)
+                    + params.C_Sf * (g * params.lr - ACCL * params.h)
+                )
+                * BETA
+                + (
+                    params.C_Sr * (g * params.lf + ACCL * params.h) * params.lr
+                    - params.C_Sf * (g * params.lr - ACCL * params.h) * params.lf
+                )
+                * (PSI_DOT / V)
+            )
+            - PSI_DOT,  # BETA_DOT
+            0.0,  # dummy dim
+            0.0,  # dummy dim
+        ]
+    )
+    
+    f_ret = jax.lax.select(jnp.abs(V) < 0.1, f_ks, f)
+
+    return f_ret
+
+
+@partial(jax.jit, static_argnums=[1])
+def vehicle_dynamics_st_smooth(x_and_u: chex.Array, params: Param) -> chex.Array:
+    """
+    Single Track Vehicle Dynamics.
+    From https://gitlab.lrz.de/tum-cps/commonroad-vehicle-models/-/blob/master/vehicleModels_commonRoad.pdf, section 7
+
+        Args:
+            x_and_u (jax.numpy.ndarray (7, )): vehicle state vector with control input vector (x0, x1, x2, x3, x4, u0, u1)
+                x0: x position in global coordinates
+                x1: y position in global coordinates
+                x2: steering angle of front wheels
+                x3: velocity in x direction
+                x4: yaw angle
+                u0: steering angle velocity of front wheels
+                u1: longitudinal acceleration
+            params (Param): jittable dataclass with the following fields:
+                mu (float): friction coefficient
+                C_Sf (float): cornering stiffness of front wheels
+                C_Sr (float): cornering stiffness of rear wheels
+                lf (float): distance from center of gravity to front axle
+                lr (float): distance from center of gravity to rear axle
+                h (float): height of center of gravity
+                m (float): mass of vehicle
+                I (float): moment of inertia of vehicle, about Z axis
+                s_min (float): minimum steering angle
+                s_max (float): maximum steering angle
+                sv_min (float): minimum steering velocity
+                sv_max (float): maximum steering velocity
+                v_switch (float): velocity above which the acceleration is no longer able to create wheel slip
+                a_max (float): maximum allowed acceleration
+                v_min (float): minimum allowed velocity
+                v_max (float): maximum allowed velocity
+
+        Returns:
+            f (jax.numpy.ndarray (7, )): right hand side of differential equations
+    """
+    # States
+    X = x_and_u[0]
+    Y = x_and_u[1]
+    DELTA = x_and_u[2]
+    V = x_and_u[3]
     PSI = x_and_u[4]
     PSI_DOT = x_and_u[5]
     BETA = x_and_u[6]

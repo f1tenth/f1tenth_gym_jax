@@ -31,7 +31,11 @@ from .utils import State, Param
 from .track import Track
 
 # dynamics
-from .dynamic_models import vehicle_dynamics_ks, vehicle_dynamics_st
+from .dynamic_models import (
+    vehicle_dynamics_ks,
+    vehicle_dynamics_st_switching,
+    vehicle_dynamics_st_smooth,
+)
 
 # integrators
 from .integrator import integrate_euler, integrate_rk4
@@ -76,7 +80,10 @@ class F110Env(MultiAgentEnv):
             )
 
         if params.model == "st":
-            self.model_func = vehicle_dynamics_st
+            self.model_func = vehicle_dynamics_st_switching
+            self.state_size = 7
+        elif params.model == "st_smooth":
+            self.model_func = vehicle_dynamics_st_smooth
             self.state_size = 7
         elif params.model == "ks":
             self.model_func = vehicle_dynamics_ks
@@ -84,13 +91,15 @@ class F110Env(MultiAgentEnv):
         else:
             raise (
                 ValueError(
-                    f"Chosen dynamics model {params.model} is invalid. Choose either 'st' or 'ks'."
+                    f"Chosen dynamics model {params.model} is invalid. Choose either 'st', 'st_smooth', or 'ks'."
                 )
             )
 
         # spaces
         # TODO: this is now bounded by maximum acceleration
-        self.action_spaces = {i: Box(-self.params.a_max, self.params.a_max, (2,)) for i in self.agents}
+        self.action_spaces = {
+            i: Box(-self.params.a_max, self.params.a_max, (2,)) for i in self.agents
+        }
 
         # scanning or not
         if params.produce_scans:
@@ -257,9 +266,9 @@ class F110Env(MultiAgentEnv):
         )
 
         # reset winding vector
-        state = state.replace(prev_winding_vector = (
-            state.cartesian_states[:, [0, 1]] - self.winding_point
-        ))
+        state = state.replace(
+            prev_winding_vector=(state.cartesian_states[:, [0, 1]] - self.winding_point)
+        )
         return self.get_obs(state), state
 
     @partial(jax.jit, static_argnums=[0])
@@ -310,25 +319,31 @@ class F110Env(MultiAgentEnv):
             jnp.einsum("ij,ij->i", winding_vector, state.prev_winding_vector),
         )
 
-        state = state.replace(accumulated_angles = state.accumulated_angles + winding_angles)
-        state = state.replace(num_laps = (jnp.abs(state.accumulated_angles) / (2 * jnp.pi)).astype(int))
+        state = state.replace(
+            accumulated_angles=state.accumulated_angles + winding_angles
+        )
+        state = state.replace(
+            num_laps=(jnp.abs(state.accumulated_angles) / (2 * jnp.pi)).astype(int)
+        )
         laps_done = state.num_laps >= self.params.max_num_laps
 
         # collision dones
         done_dict = {
-            a: jnp.logical_or(state.collisions[i], laps_done[i]) for i, a in enumerate(self.agents)
+            a: jnp.logical_or(state.collisions[i], laps_done[i])
+            for i, a in enumerate(self.agents)
         }
 
         # update state
-        state = state.replace(done = jnp.logical_or(state.collisions, laps_done))
-        state = state.replace(prev_winding_vector = winding_vector)
+        state = state.replace(done=jnp.logical_or(state.collisions, laps_done))
+        state = state.replace(prev_winding_vector=winding_vector)
 
         return done_dict, state
-    
+
     @partial(jax.jit, static_argnums=[0])
     def get_reward(self, state: State) -> Dict[str, float]:
         def reward(i):
             return 0.0
+
         return {a: reward(i) for i, a in enumerate(self.agents)}
 
     @partial(jax.jit, static_argnums=[0])
@@ -398,5 +413,5 @@ class F110Env(MultiAgentEnv):
         full_collisions = jnp.logical_or(padded_collisions, map_collisions)
 
         # update state
-        state = state.replace(collisions = full_collisions)
+        state = state.replace(collisions=full_collisions)
         return state

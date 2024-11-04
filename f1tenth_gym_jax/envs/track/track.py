@@ -165,6 +165,7 @@ class Track:
             ox=ox,
             oy=oy,
             oyaw=oyaw,
+            filepath=track_dir / str(map_filename),
         )
 
     @staticmethod

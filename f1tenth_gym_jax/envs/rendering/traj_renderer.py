@@ -4,12 +4,20 @@ import numpy as np
 import pyglet
 from pyglet import shapes
 from pyglet.gl import *
+from PIL import Image
 
-from ..track import Track
+from ..f110_env import F110Env
 from ..collision_models import get_vertices
 
+
 class TrajectoryPlayer:
-    def __init__(self, track: Track, window_width: int=800, window_height: int=600):
+    def __init__(
+        self,
+        env: F110Env,
+        num_env: int,
+        window_width: int = 800,
+        window_height: int = 600,
+    ):
         """
         Initialize the player with the map and trajectories.
 
@@ -19,31 +27,63 @@ class TrajectoryPlayer:
             window_height (int): Height of the window.
         """
         # Initialize window
-        self.window = pyglet.window.Window(width=window_width, height=window_height)
-        
-        # Load map image as background
-        self.background_sprite = pyglet.sprite.Sprite(track.occ_map)
-        
+        config = Config(sample_buffers=1, sampels=4, depth_size=16, double_buffer=True)
+        self.window = pyglet.window.Window(
+            width=window_width,
+            height=window_height,
+            config=config,
+            resizable=True,
+            vsync=False,
+        )
+
         # Store trajectories and initialize rectangle shapes in a batch
         self.batch = pyglet.graphics.Batch()
-        
-        
+
+        # map
+        self.map_sprite = pyglet.sprite.Sprite(
+            img=pyglet.image.load(env.track.filepath), batch=self.batch
+        )
+
+        self.env = env
+
         # Playback control
         self.time_step = 0
         self.playing = False
         self.speed = 1  # Controls speed of playback (1 = normal, 2 = double, etc.)
-        
+
         # Button positions and state
         self.buttons = {
-            'play_pause': shapes.Rectangle(10, 10, 80, 30, color=(0, 200, 0), batch=self.batch),
-            'faster': shapes.Rectangle(100, 10, 80, 30, color=(0, 100, 200), batch=self.batch),
-            'slower': shapes.Rectangle(190, 10, 80, 30, color=(200, 100, 0), batch=self.batch),
+            "play_pause": pyglet.gui.ToggleButton(x=100, y=100, batch=self.batch),
+            "faster": shapes.Rectangle(
+                100, 10, 80, 30, color=(0, 100, 200), batch=self.batch
+            ),
+            "slower": shapes.Rectangle(
+                190, 10, 80, 30, color=(200, 100, 0), batch=self.batch
+            ),
         }
         self.button_texts = {
-            'play_pause': pyglet.text.Label('Play', x=50, y=25, anchor_x='center', batch=self.batch),
-            'faster': pyglet.text.Label('Faster', x=140, y=25, anchor_x='center', batch=self.batch),
-            'slower': pyglet.text.Label('Slower', x=230, y=25, anchor_x='center', batch=self.batch),
+            "play_pause": pyglet.text.Label(
+                "Play", x=50, y=25, anchor_x="center", batch=self.batch
+            ),
+            "faster": pyglet.text.Label(
+                "Faster", x=140, y=25, anchor_x="center", batch=self.batch
+            ),
+            "slower": pyglet.text.Label(
+                "Slower", x=230, y=25, anchor_x="center", batch=self.batch
+            ),
         }
+
+        self.playback_speed_text = pyglet.text.Label(
+            f"Playback speed: {self.speed}x",
+            x=300,
+            y=25,
+            anchor_x="center",
+            batch=self.batch,
+        )
+
+        self.env_slider = pyglet.gui.Slider(
+            x=0, y=0, width=0.5 * window_width, height=20, batch=self.batch
+        )
 
     def update(self, dt):
         """Update positions of rectangles according to trajectories."""
@@ -51,7 +91,9 @@ class TrajectoryPlayer:
             return  # Pause if not playing
 
         # Update each rectangle's position in its trajectory
-        for idx, (rectangle, trajectory) in enumerate(zip(self.rectangles, self.trajectories)):
+        for idx, (rectangle, trajectory) in enumerate(
+            zip(self.rectangles, self.trajectories)
+        ):
             if self.time_step < len(trajectory):
                 new_x, new_y = trajectory[self.time_step]
                 rectangle.x = new_x
@@ -69,7 +111,7 @@ class TrajectoryPlayer:
     def toggle_play_pause(self):
         """Toggle between play and pause states."""
         self.playing = not self.playing
-        self.button_texts['play_pause'].text = 'Pause' if self.playing else 'Play'
+        self.button_texts["play_pause"].text = "Pause" if self.playing else "Play"
 
     def increase_speed(self):
         """Increase playback speed."""
@@ -81,29 +123,74 @@ class TrajectoryPlayer:
 
     def check_button_click(self, x, y):
         """Check if a button was clicked."""
-        if self.buttons['play_pause'].x < x < self.buttons['play_pause'].x + self.buttons['play_pause'].width and \
-           self.buttons['play_pause'].y < y < self.buttons['play_pause'].y + self.buttons['play_pause'].height:
+        if (
+            self.buttons["play_pause"].x
+            < x
+            < self.buttons["play_pause"].x + self.buttons["play_pause"].width
+            and self.buttons["play_pause"].y
+            < y
+            < self.buttons["play_pause"].y + self.buttons["play_pause"].height
+        ):
             self.toggle_play_pause()
-        elif self.buttons['faster'].x < x < self.buttons['faster'].x + self.buttons['faster'].width and \
-             self.buttons['faster'].y < y < self.buttons['faster'].y + self.buttons['faster'].height:
+        elif (
+            self.buttons["faster"].x
+            < x
+            < self.buttons["faster"].x + self.buttons["faster"].width
+            and self.buttons["faster"].y
+            < y
+            < self.buttons["faster"].y + self.buttons["faster"].height
+        ):
             self.increase_speed()
-        elif self.buttons['slower'].x < x < self.buttons['slower'].x + self.buttons['slower'].width and \
-             self.buttons['slower'].y < y < self.buttons['slower'].y + self.buttons['slower'].height:
+        elif (
+            self.buttons["slower"].x
+            < x
+            < self.buttons["slower"].x + self.buttons["slower"].width
+            and self.buttons["slower"].y
+            < y
+            < self.buttons["slower"].y + self.buttons["slower"].height
+        ):
             self.decrease_speed()
 
     def render_trajectory(self, trajectory):
         """Render a trajectory as a series of rectangles."""
-        rectangles = []
-        for x, y in trajectory:
-            rectangle = shapes.Rectangle(x, y, 10, 10, color=(255, 0, 0), batch=self.batch)
-            rectangles.append(rectangle)
-        return rectangles
+        # rectangles = []
+        # for x, y in trajectory:
+        #     rectangle = shapes.Rectangle(x, y, 10, 10, color=(255, 0, 0), batch=self.batch)
+        #     rectangles.append(rectangle)
+        # return rectangles
+        vertices = get_vertices(
+            trajectory, self.env.params.width, self.env.params.length
+        )
+        vertices = list(np.array(vertices).flatten())
+        # TODO: correctly set colors
+        self.batch.add(4, GL_QUADS, None, ("v2f", vertices), ("c3B", (255, 0, 0) * 4))
+
+    def render_trajectory_to_videos(self, trajectory: np.ndarray, prefix: str):
+        num_steps, num_env, num_agents, num_states = trajectory.shape
+        for env_id in range(num_env):
+            gif_name = f"{prefix}_env_{env_id}.gif"
+            frames = []
+            for step in range(num_steps):
+                self.window.clear()
+                self.background_sprite.draw()
+                for agent_id in range(num_agents):
+                    self.render_trajectory(trajectory[step, env_id, agent_id])
+                self.batch.draw()
+                self.window.flip()
+                frames.append(
+                    Image.frombuffer(
+                        pyglet.image.get_buffer_manager().get_color_buffer()
+                    )
+                )
+            frames[0].save(
+                gif_name, save_all=True, append_images=frames[1:], loop=0, duration=100
+            )
 
     def run(self):
         """Run the player."""
         # Schedule the update function
-        pyglet.clock.schedule_interval(self.update, 1/30)  # 30 FPS update rate
-        
+        pyglet.clock.schedule_interval(self.update, 1 / 30)  # 30 FPS update rate
+
         # Set up window draw and mouse events
         @self.window.event
         def on_draw():
@@ -116,17 +203,20 @@ class TrajectoryPlayer:
         # Start the pyglet application
         pyglet.app.run()
 
+
 # Example usage
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Define some sample trajectories for two rectangles
     sample_trajectories = [
         [(100 + i * 5, 100 + i * 5) for i in range(100)],  # Diagonal movement
-        [(300 - i * 5, 200 + i * 3) for i in range(100)]   # Diagonal in another direction
+        [
+            (300 - i * 5, 200 + i * 3) for i in range(100)
+        ],  # Diagonal in another direction
     ]
-    
+
     # Path to map image (replace 'map.png' with your actual map file)
-    map_image_path = 'map.png'
-    
+    map_image_path = "map.png"
+
     # Create the player and run it
     player = TrajectoryPlayer(map_image_path, sample_trajectories)
     player.run()

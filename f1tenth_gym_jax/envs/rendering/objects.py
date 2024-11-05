@@ -46,16 +46,22 @@ class TextObject:
         """
         self.position = position
 
-        self.text_label = pg.LabelItem("", parent=parent, size=str(relative_font_size) + 'pt', family=font_name, color=(125, 125, 125)) # create text label
+        self.text_label = pg.LabelItem(
+            "",
+            parent=parent,
+            size=str(relative_font_size) + "pt",
+            family=font_name,
+            color=(125, 125, 125),
+        )  # create text label
         # Get the position and offset of the text
         position_tuple = self._position_resolver(self.position)
         offset_tuple = self._offset_resolver(self.position, self.text_label)
         # Set the position and offset of the text
-        self.text_label.anchor(itemPos=position_tuple, parentPos=position_tuple, offset=offset_tuple)
+        self.text_label.anchor(
+            itemPos=position_tuple, parentPos=position_tuple, offset=offset_tuple
+        )
 
-    def _position_resolver(
-        self, position: str | tuple[int, int]
-    ) -> tuple[int, int]:
+    def _position_resolver(self, position: str | tuple[int, int]) -> tuple[int, int]:
         """
         This function takes strings like "bottom center" and converts them into a location for the text to be displayed.
         If position is tuple, then passthrough.
@@ -133,20 +139,20 @@ class TextObject:
             elif position == "bottom_left":
                 return (0, 0)
             elif position == "bottom_center":
-                return (-text_label.width()/2, 0)
+                return (-text_label.width() / 2, 0)
             elif position == "top_right":
                 return (-text_label.width(), 0)
             elif position == "top_left":
                 return (0, 0)
             elif position == "top_center":
-                return (-text_label.width()/2, 0)
+                return (-text_label.width() / 2, 0)
             else:
                 raise NotImplementedError(f"Position {position} not implemented.")
         else:
             raise ValueError(
                 f"Position expected to be a tuple[int, int] or a string. Got {position}."
             )
-        
+
     def render(self, text: str) -> None:
         """
         Render text on the screen.
@@ -154,9 +160,10 @@ class TextObject:
         Parameters
         ----------
         text : str
-            text to be displayed                 
+            text to be displayed
         """
         self.text_label.setText(text)
+
 
 @njit(cache=True)
 def _get_tire_vertices(pose, length, width, tire_width, tire_length, index, steering):
@@ -172,47 +179,88 @@ def _get_tire_vertices(pose, length, width, tire_width, tire_length, index, stee
         vertices (np.ndarray, (4, 2)): corner vertices of the vehicle body
     """
     pose_arr = np.array(pose)
-    if index == 'fl':
+    if index == "fl":
         # Shift back, rotate
-        H_shift = get_trmtx(np.array([-(length/2 - tire_length/2), -(width/2 - tire_width/2), 0]))
+        H_shift = get_trmtx(
+            np.array(
+                [-(length / 2 - tire_length / 2), -(width / 2 - tire_width / 2), 0]
+            )
+        )
         H_steer = get_trmtx(np.array([0, 0, steering]))
-        H_back = get_trmtx(np.array([length/2 - tire_length/2, width/2 - tire_width/2, 0]))
+        H_back = get_trmtx(
+            np.array([length / 2 - tire_length / 2, width / 2 - tire_width / 2, 0])
+        )
         H = get_trmtx(pose_arr)
         H = H.dot(H_back).dot(H_steer).dot(H_shift)
         fl = H.dot(np.asarray([[length / 2], [width / 2], [0.0], [1.0]])).flatten()
-        fr = H.dot(np.asarray([[length / 2], [width / 2 - tire_width], [0.0], [1.0]])).flatten()
-        rr = H.dot(np.asarray([[length / 2 - tire_length], [width / 2 - tire_width], [0.0], [1.0]])).flatten()
-        rl = H.dot(np.asarray([[length / 2 - tire_length], [width / 2], [0.0], [1.0]])).flatten()
+        fr = H.dot(
+            np.asarray([[length / 2], [width / 2 - tire_width], [0.0], [1.0]])
+        ).flatten()
+        rr = H.dot(
+            np.asarray(
+                [[length / 2 - tire_length], [width / 2 - tire_width], [0.0], [1.0]]
+            )
+        ).flatten()
+        rl = H.dot(
+            np.asarray([[length / 2 - tire_length], [width / 2], [0.0], [1.0]])
+        ).flatten()
         rl = rl / rl[3]
         rr = rr / rr[3]
         fl = fl / fl[3]
         fr = fr / fr[3]
         vertices = np.asarray(
-            [[rl[0], rl[1]], [fl[0], fl[1]], [fr[0], fr[1]], [rr[0], rr[1]], [rl[0], rl[1]]]
+            [
+                [rl[0], rl[1]],
+                [fl[0], fl[1]],
+                [fr[0], fr[1]],
+                [rr[0], rr[1]],
+                [rl[0], rl[1]],
+            ]
         )
-    elif index == 'fr':
+    elif index == "fr":
         # Shift back, rotate
-        H_shift = get_trmtx(np.array([-(length/2 - tire_length/2), -(-width/2 + tire_width/2), 0]))
+        H_shift = get_trmtx(
+            np.array(
+                [-(length / 2 - tire_length / 2), -(-width / 2 + tire_width / 2), 0]
+            )
+        )
         H_steer = get_trmtx(np.array([0, 0, steering]))
-        H_back = get_trmtx(np.array([length/2 - tire_length/2, -width/2 + tire_width/2, 0]))
+        H_back = get_trmtx(
+            np.array([length / 2 - tire_length / 2, -width / 2 + tire_width / 2, 0])
+        )
         H = get_trmtx(pose_arr)
         H = H.dot(H_back).dot(H_steer).dot(H_shift)
 
-        fl = H.dot(np.asarray([[length / 2], [-width / 2 + tire_width], [0.0], [1.0]])).flatten()
+        fl = H.dot(
+            np.asarray([[length / 2], [-width / 2 + tire_width], [0.0], [1.0]])
+        ).flatten()
         fr = H.dot(np.asarray([[length / 2], [-width / 2], [0.0], [1.0]])).flatten()
-        rr = H.dot(np.asarray([[length / 2 - tire_length], [-width / 2], [0.0], [1.0]])).flatten()
-        rl = H.dot(np.asarray([[length / 2 - tire_length], [-width / 2 + tire_width], [0.0], [1.0]])).flatten()
+        rr = H.dot(
+            np.asarray([[length / 2 - tire_length], [-width / 2], [0.0], [1.0]])
+        ).flatten()
+        rl = H.dot(
+            np.asarray(
+                [[length / 2 - tire_length], [-width / 2 + tire_width], [0.0], [1.0]]
+            )
+        ).flatten()
         rl = rl / rl[3]
         rr = rr / rr[3]
         fl = fl / fl[3]
         fr = fr / fr[3]
         # As it is only used for rendering, we can reorder the vertices and append the first point to close the polygon
         vertices = np.asarray(
-            [[rl[0], rl[1]], [fl[0], fl[1]], [fr[0], fr[1]], [rr[0], rr[1]], [rl[0], rl[1]]]
+            [
+                [rl[0], rl[1]],
+                [fl[0], fl[1]],
+                [fr[0], fr[1]],
+                [rr[0], rr[1]],
+                [rl[0], rl[1]],
+            ]
         )
 
     return vertices
-    
+
+
 class Car:
     """
     Class to display the car.
@@ -252,27 +300,49 @@ class Car:
         vertices = np.array([vertices[0], vertices[3], vertices[2], vertices[1]])
         # Append the first point to close the polygon
         vertices = np.vstack([vertices, vertices[0]])
-        self.chassis : pg.PlotDataItem = parent.plot(vertices[:, 0], vertices[:, 1], pen=pg.mkPen(color=(0,0,0), width=self.car_thickness), fillLevel=0, brush=self.color)
+        self.chassis: pg.PlotDataItem = parent.plot(
+            vertices[:, 0],
+            vertices[:, 1],
+            pen=pg.mkPen(color=(0, 0, 0), width=self.car_thickness),
+            fillLevel=0,
+            brush=self.color,
+        )
 
         if self.show_wheels:
             # Top-left wheel center is at fl - (tire_width/2, tire_length/2)
-            fl_vertices = _get_tire_vertices(self.pose, self.car_length, self.car_width, self.tire_width, self.tire_length, 'fl', self.steering)
+            fl_vertices = _get_tire_vertices(
+                self.pose,
+                self.car_length,
+                self.car_width,
+                self.tire_width,
+                self.tire_length,
+                "fl",
+                self.steering,
+            )
             self.fl_wheel = parent.plot(
                 fl_vertices[:, 0],
                 fl_vertices[:, 1],
-                pen=pg.mkPen(color=(0,0,0), width=self.car_thickness),
+                pen=pg.mkPen(color=(0, 0, 0), width=self.car_thickness),
                 fillLevel=0,
-                brush=(0,0,0), # Rubber tire => Black
+                brush=(0, 0, 0),  # Rubber tire => Black
             )
 
             # Top-right wheel center is at fr - (tire_width/2, tire_length/2)
-            fr_vertices = _get_tire_vertices(self.pose, self.car_length, self.car_width, self.tire_width, self.tire_length, 'fr', self.steering)
+            fr_vertices = _get_tire_vertices(
+                self.pose,
+                self.car_length,
+                self.car_width,
+                self.tire_width,
+                self.tire_length,
+                "fr",
+                self.steering,
+            )
             self.fr_wheel = parent.plot(
                 fr_vertices[:, 0],
                 fr_vertices[:, 1],
-                pen=pg.mkPen(color=(0,0,0), width=self.car_thickness),
+                pen=pg.mkPen(color=(0, 0, 0), width=self.car_thickness),
                 fillLevel=0,
-                brush=(0,0,0), # Rubber tire => Black
+                brush=(0, 0, 0),  # Rubber tire => Black
             )
 
     def update(self, state: dict[str, np.ndarray], idx: int):
@@ -295,12 +365,25 @@ class Car:
 
         if self.show_wheels:
             # Top-left wheel center is at fl - (tire_width/2, tire_length/2)
-            fl_vertices = _get_tire_vertices(self.pose, self.car_length, self.car_width, self.tire_width, self.tire_length, 'fl', self.steering)
+            fl_vertices = _get_tire_vertices(
+                self.pose,
+                self.car_length,
+                self.car_width,
+                self.tire_width,
+                self.tire_length,
+                "fl",
+                self.steering,
+            )
             self.fl_wheel.setData(fl_vertices[:, 0], fl_vertices[:, 1])
 
             # Top-right wheel center is at fr - (tire_width/2, tire_length/2)
-            fr_vertices = _get_tire_vertices(self.pose, self.car_length, self.car_width, self.tire_width, self.tire_length, 'fr', self.steering)
+            fr_vertices = _get_tire_vertices(
+                self.pose,
+                self.car_length,
+                self.car_width,
+                self.tire_width,
+                self.tire_length,
+                "fr",
+                self.steering,
+            )
             self.fr_wheel.setData(fr_vertices[:, 0], fr_vertices[:, 1])
-            
-
-

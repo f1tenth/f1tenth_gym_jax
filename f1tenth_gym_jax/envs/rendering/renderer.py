@@ -30,6 +30,8 @@ class TrajRenderer:
         self,
         env: F110Env,
         render_fps: int = 100,
+        window_width: int = 800,
+        window_height: int = 600,
     ):
         """
         Initialize the Pygame renderer.
@@ -49,26 +51,20 @@ class TrajRenderer:
         render_fps : int
             number of frames per second
         """
-        super().__init__()
-        self.params = params
-        self.agent_ids = agent_ids
+        self.env = env
 
         self.cars = None
         self.sim_time = None
         self.window = None
         self.canvas = None
 
-        self.render_spec = render_spec
-        self.render_mode = render_mode
         self.render_fps = render_fps
 
         # create the canvas
         self.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
         self.window = pg.GraphicsLayoutWidget()
-        self.window.setWindowTitle("F1Tenth Gym")
-        self.window.setGeometry(
-            0, 0, self.render_spec.window_size, self.render_spec.window_size
-        )
+        self.window.setWindowTitle("f1tenth_gym_jax - Trajectory Renderer")
+        self.window.setGeometry(0, 0, window_width, window_height)
         self.canvas: pg.PlotItem = self.window.addPlot()
 
         # Disable interactivity
@@ -88,8 +84,12 @@ class TrajRenderer:
         self.canvas.hideAxis("bottom")
         self.canvas.hideAxis("left")
 
-        # setting plot window background color to yellow
+        # setting plot window background color
         self.window.setBackground("w")
+
+        # widgets
+        self.cw = QtWidgets.QWidget()
+        self.cw.setLayout(QtWidgets.QGridLayout())
 
         # fps and time renderer
         self.clock = FrameCounter()
@@ -99,6 +99,16 @@ class TrajRenderer:
             parent=self.canvas, position="bottom_center"
         )
         self.top_info_renderer = TextObject(parent=self.canvas, position="top_center")
+
+        # trajectory selector
+        self.selector = pg.SpinBox(
+            value=0,
+            bounds=[0, self.num_trajectories - 1],
+            int=True,
+            minStep=1,
+            step=1,
+            wrapping=True,
+        )
 
         if self.render_mode in ["human", "human_fast"]:
             self.clock.sigFpsUpdate.connect(
@@ -251,7 +261,7 @@ class TrajRenderer:
 
             self.active_map_renderer = "map"
 
-    def render(self) -> Optional[np.ndarray]:
+    def render(self, trajectory: np.ndarray) -> Optional[np.ndarray]:
         """
         Render the current state in a frame.
         It renders in the order: map, cars, callbacks, info text.
@@ -261,6 +271,9 @@ class TrajRenderer:
         Optional[np.ndarray]
             if render_mode is "rgb_array", returns the rendered frame as an array
         """
+        # get sizes
+        num_steps, num_envs, num_agents, num_states = trajectory.shape
+
         # draw cars
         for i in range(len(self.agent_ids)):
             self.cars[i].render()

@@ -76,3 +76,4 @@ class Param:
     num_rays: float = 1000  # number of rays in each scan
     map_name: str = "Spielberg"  # map for environment
     max_num_laps: int = 1  # maximum number of laps to run before done
+    reward_type: str = "time"  # reward type

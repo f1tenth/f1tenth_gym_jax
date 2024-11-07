@@ -65,7 +65,32 @@ class TrajRenderer:
         self.window = pg.GraphicsLayoutWidget()
         self.window.setWindowTitle("f1tenth_gym_jax - Trajectory Renderer")
         self.window.setGeometry(0, 0, window_width, window_height)
-        self.canvas: pg.PlotItem = self.window.addPlot()
+        self.canvas = pg.PlotWidget()
+
+        self.layout = QtWidgets.QGridLayout()
+        self.window.setLayout(self.layout)
+
+        self.layout.addWidget(self.canvas, 0, 0, 1, 3, QtCore.Qt.AlignmentFlag.AlignHCenter)
+        spin_text = QtWidgets.QLabel("Trajectory #:")
+        self.layout.addWidget(spin_text, 1, 0, QtCore.Qt.AlignmentFlag.AlignHCenter)
+        # trajectory selector
+        self.selector = pg.SpinBox(
+            value=0,
+            bounds=[0, self.num_trajectories - 1],
+            int=True,
+            minStep=1,
+            step=1,
+            wrapping=True,
+        )
+        self.selector.setFixedSize(100, 20)
+        self.selector.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        self.layout.addWidget(self.selector, 2, 0, QtCore.Qt.AlignmentFlag.AlignHCenter)
+        # buttons
+        self.buttons = [QtWidgets.QPushButton("<<"), QtWidgets.QPushButton("Play/Pause"), QtWidgets.QPushButton(">>")]
+        for i, b in enumerate(self.buttons):
+            b.setFixedSize(100, 20)
+            self.layout.addWidget(b, 2, 1 + i, QtCore.Qt.AlignmentFlag.AlignHCenter)
+        
 
         # Disable interactivity
         self.canvas.setMouseEnabled(x=False, y=False)  # Disable mouse panning & zooming
@@ -100,16 +125,6 @@ class TrajRenderer:
         )
         self.top_info_renderer = TextObject(parent=self.canvas, position="top_center")
 
-        # trajectory selector
-        self.selector = pg.SpinBox(
-            value=0,
-            bounds=[0, self.num_trajectories - 1],
-            int=True,
-            minStep=1,
-            step=1,
-            wrapping=True,
-        )
-
         if self.render_mode in ["human", "human_fast"]:
             self.clock.sigFpsUpdate.connect(
                 lambda fps: self.fps_renderer.render(f"FPS: {fps:.1f}")
@@ -123,14 +138,12 @@ class TrajRenderer:
             colors_rgb[i % len(colors_rgb)] for i in range(len(self.agent_ids))
         ]
 
-        width, height = render_spec.window_size, render_spec.window_size
-
         # map metadata
-        self.map_origin = track.spec.origin
-        self.map_resolution = track.spec.resolution
+        self.map_origin = [env.track.ox, env.track.oy, env.track.oyaw]
+        self.map_resolution = env.track.resolution
 
         # load map image
-        original_img = track.occupancy_map
+        original_img = env.track.occ_map
 
         # convert shape from (W, H) to (W, H, 3)
         track_map = np.stack([original_img, original_img, original_img], axis=-1)

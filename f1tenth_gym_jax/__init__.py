@@ -1,4 +1,4 @@
-from .registration import make, registered_envs
+from .registration import make
 
-__all__ = ["make", "registered_envs"]
+__all__ = ["make"]
 __version__ = "0.0.1"

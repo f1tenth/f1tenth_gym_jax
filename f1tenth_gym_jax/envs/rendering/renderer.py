@@ -1,7 +1,6 @@
 from __future__ import annotations
 import logging
 from typing import Any, Callable, Optional
-import signal
 
 import numpy as np
 from PyQt6 import QtWidgets, QtCore
@@ -11,14 +10,7 @@ from pyqtgraph.examples.utils import FrameCounter
 from pyqtgraph.exporters import ImageExporter
 from PIL import ImageColor
 
-from .objects import (
-    Car,
-    TextObject,
-)
 from ..f110_env import F110Env
-
-# one-line instructions visualized at the top of the screen (if show_info=True)
-INSTRUCTION_TEXT = "Mouse click (L/M/R): Change POV - 'S' key: On/Off"
 
 
 class TrajRenderer:
@@ -32,26 +24,26 @@ class TrajRenderer:
         render_fps: int = 100,
         window_width: int = 800,
         window_height: int = 600,
+        render_mode: str = "huamn",
     ):
         """
         Initialize the Pygame renderer.
 
         Parameters
         ----------
-        params : dict
-            dictionary of simulation parameters (including vehicle dimensions, etc.)
-        track : Track
-            track object
-        agent_ids : list
-            list of agent ids to render
-        render_spec : RenderSpec
-            rendering specification
-        render_mode : str
-            rendering mode in ["human", "human_fast", "rgb_array"]
-        render_fps : int
-            number of frames per second
+        env : F110Env
+            environment to render
+        render_fps : int, optional
+        window_width : int, optional
+        window_height : int, optional
+        render_mode : str, optional
+            rendering mode, by default "human", choose from ["human", "human_fast", "rgb_array"]
         """
         self.env = env
+        self.render_mode = render_mode
+
+        self.num_trajectories = 1
+        self.num_agents = env.num_agents
 
         self.cars = None
         self.sim_time = None
@@ -70,27 +62,50 @@ class TrajRenderer:
         self.layout = QtWidgets.QGridLayout()
         self.window.setLayout(self.layout)
 
-        self.layout.addWidget(self.canvas, 0, 0, 1, 3, QtCore.Qt.AlignmentFlag.AlignHCenter)
+        self.layout.addWidget(
+            self.canvas, 0, 0, 1, 3, QtCore.Qt.AlignmentFlag.AlignHCenter
+        )
         spin_text = QtWidgets.QLabel("Trajectory #:")
         self.layout.addWidget(spin_text, 1, 0, QtCore.Qt.AlignmentFlag.AlignHCenter)
         # trajectory selector
-        self.selector = pg.SpinBox(
+        self.traj_selector = pg.SpinBox(
             value=0,
-            bounds=[0, self.num_trajectories - 1],
+            bounds=[0, self.num_trajectories],
             int=True,
             minStep=1,
             step=1,
             wrapping=True,
         )
-        self.selector.setFixedSize(100, 20)
-        self.selector.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
-        self.layout.addWidget(self.selector, 2, 0, QtCore.Qt.AlignmentFlag.AlignHCenter)
+        self.traj_selector.setFixedSize(100, 20)
+        self.traj_selector.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        self.layout.addWidget(self.traj_selector, 2, 0, QtCore.Qt.AlignmentFlag.AlignHCenter)
+
+        self.traj_selector.sigValueChanged.connect(self.traj_to_render)
+
+        # focus selector (each agent + map)
+        self.focus_selector = pg.SpinBox(
+            value=0,
+            bounds=[0, self.env.num_agents + 1],
+            int=True,
+            minStep=1,
+            step=1,
+            wrapping=True,
+        )
+        self.focus_selector.setFixedSize(100, 20)
+        self.focus_selector.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        self.layout.addWidget(self.focus_selector, 2, 0, QtCore.Qt.AlignmentFlag.AlignHCenter)
+
+        self.focus_selector.sigValueChanged.connect(self.entity_to_focus_on)
+
         # buttons
-        self.buttons = [QtWidgets.QPushButton("<<"), QtWidgets.QPushButton("Play/Pause"), QtWidgets.QPushButton(">>")]
+        self.buttons = [
+            QtWidgets.QPushButton("<<"),
+            QtWidgets.QPushButton("Play/Pause"),
+            QtWidgets.QPushButton(">>"),
+        ]
         for i, b in enumerate(self.buttons):
             b.setFixedSize(100, 20)
             self.layout.addWidget(b, 2, 1 + i, QtCore.Qt.AlignmentFlag.AlignHCenter)
-        
 
         # Disable interactivity
         self.canvas.setMouseEnabled(x=False, y=False)  # Disable mouse panning & zooming
@@ -125,15 +140,19 @@ class TrajRenderer:
         )
         self.top_info_renderer = TextObject(parent=self.canvas, position="top_center")
 
+
+        # playback control states
+        self.playing = False
+        self.speed = 1
+        self.focus_on = 0 # 0: agent 0,  1: agent 1, 2: agent 2, 3: agent 3, ... , n: map
+
         if self.render_mode in ["human", "human_fast"]:
             self.clock.sigFpsUpdate.connect(
                 lambda fps: self.fps_renderer.render(f"FPS: {fps:.1f}")
             )
 
-        colors_rgb = [
-            [rgb for rgb in ImageColor.getcolor(c, "RGB")]
-            for c in render_spec.vehicle_palette
-        ]
+        # generate a list of random color pallets in hex
+        colors_rgb = [ImageColor.getcolor("#%06x" % np.random.randint(0, 0xFFFFFF), "RGB") for i in range(100)]
         self.car_colors = [
             colors_rgb[i % len(colors_rgb)] for i in range(len(self.agent_ids))
         ]
@@ -165,19 +184,12 @@ class TrajRenderer:
         # callbacks for custom visualization, called at every rendering step
         self.callbacks = []
 
-        # event handling flags
-        self.draw_flag: bool = True
-        if render_spec.focus_on:
-            self.active_map_renderer = "car"
-            self.follow_agent_flag: bool = True
-            self.agent_to_follow: int = self.agent_ids.index(render_spec.focus_on)
-        else:
-            self.active_map_renderer = "map"
-            self.follow_agent_flag: bool = False
-            self.agent_to_follow: int = None
-
-        if self.render_mode in ["human", "human_fast"]:
-            signal.signal(signal.SIGINT, signal.SIG_DFL)
+        # rendering mode
+        if self.render_mode == "human":
+            self.speed = 1
+            self.window.show()
+        elif self.render_mode == "human_fast":
+            self.speed = 3
             self.window.show()
         elif self.render_mode == "rgb_array":
             self.exporter = ImageExporter(self.canvas)
@@ -273,6 +285,30 @@ class TrajRenderer:
             self.agent_to_follow = None
 
             self.active_map_renderer = "map"
+
+    def play_pause(self):
+        """Toggle play/pause"""
+        self.playing = not self.playing
+
+    def speed_up(self):
+        """Increase playback speed"""
+        self.speed = min(5, self.speed + 1)
+
+    def slow_down(self):
+        """Decrease playback speed"""
+        self.speed = max(1, self.speed - 1)
+
+    def set_step(self, step):
+        """Manually set the playback step"""
+        self.current_step = step % self.num_steps
+
+    def traj_to_render(self, spinbox):
+        """Set the trajectory to render"""
+        self.current_traj = int(spinbox.value())
+
+    def entity_to_focus_on(self, spinbox):
+        """Set the entity to focus on"""
+        self.focus_on = int(spinbox.value())
 
     def render(self, trajectory: np.ndarray) -> Optional[np.ndarray]:
         """

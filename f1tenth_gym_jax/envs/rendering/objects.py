@@ -5,7 +5,6 @@ import pyqtgraph as pg
 from PyQt6.QtWidgets import QGraphicsRectItem, QGraphicsPolygonItem
 from PyQt6 import QtGui
 
-from .renderer import RenderSpec
 from ..collision_models import get_vertices, get_trmtx
 
 from numba import njit

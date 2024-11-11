@@ -12,6 +12,7 @@ from PIL import ImageColor
 
 from ..f110_env import F110Env
 
+from functools import partial
 
 class TrajRenderer:
     """
@@ -24,7 +25,7 @@ class TrajRenderer:
         render_fps: int = 100,
         window_width: int = 800,
         window_height: int = 600,
-        render_mode: str = "huamn",
+        render_mode: str = "human",
     ):
         """
         Initialize the Pygame renderer.
@@ -46,7 +47,7 @@ class TrajRenderer:
         self.num_agents = env.num_agents
 
         self.cars = None
-        self.sim_time = None
+        self.sim_time = 0.0
         self.window = None
         self.canvas = None
 
@@ -106,6 +107,10 @@ class TrajRenderer:
         for i, b in enumerate(self.buttons):
             b.setFixedSize(100, 20)
             self.layout.addWidget(b, 2, 1 + i, QtCore.Qt.AlignmentFlag.AlignHCenter)
+        
+        self.buttons[0].clicked.connect(self.slow_down)
+        self.buttons[1].clicked.connect(self.play_pause)
+        self.buttons[2].clicked.connect(self.speed_up)
 
         # Disable interactivity
         self.canvas.setMouseEnabled(x=False, y=False)  # Disable mouse panning & zooming
@@ -117,7 +122,7 @@ class TrajRenderer:
         legend.mouseDragEvent = lambda *args, **kwargs: None
         legend.hoverEvent = lambda *args, **kwargs: None
         # self.scene() is a pyqtgraph.GraphicsScene.GraphicsScene.GraphicsScene
-        self.window.scene().sigMouseClicked.connect(self.mouse_clicked)
+        # self.window.scene().sigMouseClicked.connect(self.mouse_clicked)
         self.window.keyPressEvent = self.key_pressed
 
         # Remove axes
@@ -133,13 +138,16 @@ class TrajRenderer:
 
         # fps and time renderer
         self.clock = FrameCounter()
-        self.fps_renderer = TextObject(parent=self.canvas, position="bottom_left")
-        self.time_renderer = TextObject(parent=self.canvas, position="bottom_right")
-        self.bottom_info_renderer = TextObject(
-            parent=self.canvas, position="bottom_center"
-        )
-        self.top_info_renderer = TextObject(parent=self.canvas, position="top_center")
+        # self.fps_renderer = TextObject(parent=self.canvas, position="bottom_left")
+        # self.time_renderer = TextObject(parent=self.canvas, position="bottom_right")
+        
+        self.fps_renderer = pg.TextItem("FPS: 0.0", anchor=(0, 1), color=(255, 0, 0))
+        self.time_renderer = pg.TextItem("0.0", anchor=(1, 1), color=(255, 0, 0))
 
+        self.canvas.addItem(self.fps_renderer)
+        self.canvas.addItem(self.time_renderer)
+        self.fps_renderer.setPos(0, 0)
+        self.time_renderer.setPos(1, 0)
 
         # playback control states
         self.playing = False
@@ -148,13 +156,13 @@ class TrajRenderer:
 
         if self.render_mode in ["human", "human_fast"]:
             self.clock.sigFpsUpdate.connect(
-                lambda fps: self.fps_renderer.render(f"FPS: {fps:.1f}")
+                lambda fps: self.fps_renderer.setText(f"FPS: {fps:.1f}")
             )
 
         # generate a list of random color pallets in hex
         colors_rgb = [ImageColor.getcolor("#%06x" % np.random.randint(0, 0xFFFFFF), "RGB") for i in range(100)]
         self.car_colors = [
-            colors_rgb[i % len(colors_rgb)] for i in range(len(self.agent_ids))
+            colors_rgb[i % len(colors_rgb)] for i in range(self.env.num_agents)
         ]
 
         # map metadata
@@ -193,6 +201,12 @@ class TrajRenderer:
             self.window.show()
         elif self.render_mode == "rgb_array":
             self.exporter = ImageExporter(self.canvas)
+
+        self.traj_initialized = False
+        
+        self.t = QtCore.QTimer()
+        self.t.timeout.connect(self.timer_callback)
+        self.t.start(int(1000 / self.render_fps / self.speed))
 
     def update(self, state: dict) -> None:
         """
@@ -289,14 +303,20 @@ class TrajRenderer:
     def play_pause(self):
         """Toggle play/pause"""
         self.playing = not self.playing
+        self.t.stop() if self.playing else self.t.start()
+        print("play pause")
 
     def speed_up(self):
         """Increase playback speed"""
         self.speed = min(5, self.speed + 1)
+        self.t.setInterval(int(1000 / self.render_fps / self.speed))
+        print("speed up")
 
     def slow_down(self):
         """Decrease playback speed"""
         self.speed = max(1, self.speed - 1)
+        self.t.setInterval(int(1000 / self.render_fps / self.speed))
+        print("slow down")
 
     def set_step(self, step):
         """Manually set the playback step"""
@@ -310,6 +330,18 @@ class TrajRenderer:
         """Set the entity to focus on"""
         self.focus_on = int(spinbox.value())
 
+    def timer_callback(self):
+        """Timer callback for rendering"""
+        # if self.playing and self.traj_initialized:
+            # self.current_step = (self.current_step + 1) % self.num_steps
+            # TODO: render current step
+
+        # if self.playing:
+        # get frame counter
+        self.clock.update()
+        self.time_renderer.setText(f"Sim time: {self.sim_time:.2f}")
+        self.sim_time += 1.0 / self.render_fps
+
     def render(self, trajectory: np.ndarray) -> Optional[np.ndarray]:
         """
         Render the current state in a frame.
@@ -321,36 +353,37 @@ class TrajRenderer:
             if render_mode is "rgb_array", returns the rendered frame as an array
         """
         # get sizes
-        num_steps, num_envs, num_agents, num_states = trajectory.shape
+        self.num_steps, self.num_envs, self.num_agents, self.num_states = trajectory.shape
+        self.traj_initialized = True
 
-        # draw cars
-        for i in range(len(self.agent_ids)):
-            self.cars[i].render()
+        # # draw cars
+        # for i in range(len(self.agent_ids)):
+        #     self.cars[i].render()
 
-        # call callbacks
-        for callback_fn in self.callbacks:
-            callback_fn(self)
+        # # call callbacks
+        # for callback_fn in self.callbacks:
+        #     callback_fn(self)
 
-        if self.follow_agent_flag:
-            ego_x, ego_y = self.cars[self.agent_to_follow].pose[:2]
-            self.canvas.setXRange(ego_x - 10, ego_x + 10)
-            self.canvas.setYRange(ego_y - 10, ego_y + 10)
-        else:
-            self.canvas.autoRange()
+        # if self.follow_agent_flag:
+        #     ego_x, ego_y = self.cars[self.agent_to_follow].pose[:2]
+        #     self.canvas.setXRange(ego_x - 10, ego_x + 10)
+        #     self.canvas.setYRange(ego_y - 10, ego_y + 10)
+        # else:
+        #     self.canvas.autoRange()
 
-        agent_to_follow_id = (
-            self.agent_ids[self.agent_to_follow]
-            if self.agent_to_follow is not None
-            else None
-        )
-        self.bottom_info_renderer.render(text=f"Focus on: {agent_to_follow_id}")
+        # agent_to_follow_id = (
+        #     self.agent_ids[self.agent_to_follow]
+        #     if self.agent_to_follow is not None
+        #     else None
+        # )
+        # self.bottom_info_renderer.render(text=f"Focus on: {agent_to_follow_id}")
 
-        if self.render_spec.show_info:
-            self.top_info_renderer.render(text=INSTRUCTION_TEXT)
+        # if self.render_spec.show_info:
+        #     self.top_info_renderer.render(text=INSTRUCTION_TEXT)
 
-        self.time_renderer.render(text=f"{self.sim_time:.2f}")
-        self.clock.update()
-        self.app.processEvents()
+        # self.time_renderer.render(text=f"{self.sim_time:.2f}")
+        # self.clock.update()
+        # self.app.processEvents()
 
         if self.render_mode in ["human", "human_fast"]:
             assert self.window is not None

@@ -7,7 +7,7 @@ from PyQt6 import QtGui
 
 from ..collision_models import get_vertices, get_trmtx
 
-from numba import njit
+import jax
 
 
 class TextObject:
@@ -164,8 +164,8 @@ class TextObject:
         self.text_label.setText(text)
 
 
-@njit(cache=True)
-def _get_tire_vertices(pose, length, width, tire_width, tire_length, index, steering):
+@jax.jit
+def _get_tire_vertices(pose_arr, length, width, tire_width, tire_length, fl, steering):
     """
     Utility function to return vertices of the car's tire given pose and size
 
@@ -177,85 +177,44 @@ def _get_tire_vertices(pose, length, width, tire_width, tire_length, index, stee
     Returns:
         vertices (np.ndarray, (4, 2)): corner vertices of the vehicle body
     """
-    pose_arr = np.array(pose)
-    if index == "fl":
-        # Shift back, rotate
-        H_shift = get_trmtx(
-            np.array(
-                [-(length / 2 - tire_length / 2), -(width / 2 - tire_width / 2), 0]
-            )
-        )
-        H_steer = get_trmtx(np.array([0, 0, steering]))
-        H_back = get_trmtx(
-            np.array([length / 2 - tire_length / 2, width / 2 - tire_width / 2, 0])
-        )
-        H = get_trmtx(pose_arr)
-        H = H.dot(H_back).dot(H_steer).dot(H_shift)
-        fl = H.dot(np.asarray([[length / 2], [width / 2], [0.0], [1.0]])).flatten()
-        fr = H.dot(
-            np.asarray([[length / 2], [width / 2 - tire_width], [0.0], [1.0]])
-        ).flatten()
-        rr = H.dot(
-            np.asarray(
-                [[length / 2 - tire_length], [width / 2 - tire_width], [0.0], [1.0]]
-            )
-        ).flatten()
-        rl = H.dot(
-            np.asarray([[length / 2 - tire_length], [width / 2], [0.0], [1.0]])
-        ).flatten()
-        rl = rl / rl[3]
-        rr = rr / rr[3]
-        fl = fl / fl[3]
-        fr = fr / fr[3]
-        vertices = np.asarray(
-            [
-                [rl[0], rl[1]],
-                [fl[0], fl[1]],
-                [fr[0], fr[1]],
-                [rr[0], rr[1]],
-                [rl[0], rl[1]],
-            ]
-        )
-    elif index == "fr":
-        # Shift back, rotate
-        H_shift = get_trmtx(
-            np.array(
-                [-(length / 2 - tire_length / 2), -(-width / 2 + tire_width / 2), 0]
-            )
-        )
-        H_steer = get_trmtx(np.array([0, 0, steering]))
-        H_back = get_trmtx(
-            np.array([length / 2 - tire_length / 2, -width / 2 + tire_width / 2, 0])
-        )
-        H = get_trmtx(pose_arr)
-        H = H.dot(H_back).dot(H_steer).dot(H_shift)
+    working_width = jax.lax.select(fl, width, -width)
 
-        fl = H.dot(
-            np.asarray([[length / 2], [-width / 2 + tire_width], [0.0], [1.0]])
-        ).flatten()
-        fr = H.dot(np.asarray([[length / 2], [-width / 2], [0.0], [1.0]])).flatten()
-        rr = H.dot(
-            np.asarray([[length / 2 - tire_length], [-width / 2], [0.0], [1.0]])
-        ).flatten()
-        rl = H.dot(
-            np.asarray(
-                [[length / 2 - tire_length], [-width / 2 + tire_width], [0.0], [1.0]]
-            )
-        ).flatten()
-        rl = rl / rl[3]
-        rr = rr / rr[3]
-        fl = fl / fl[3]
-        fr = fr / fr[3]
-        # As it is only used for rendering, we can reorder the vertices and append the first point to close the polygon
-        vertices = np.asarray(
-            [
-                [rl[0], rl[1]],
-                [fl[0], fl[1]],
-                [fr[0], fr[1]],
-                [rr[0], rr[1]],
-                [rl[0], rl[1]],
-            ]
+    H_shift = get_trmtx(
+        jax.numpy.array(
+            [-(length / 2 - tire_length / 2), -(working_width / 2 - tire_width / 2), 0]
         )
+    )
+    H_steer = get_trmtx(jax.numpy.array([0, 0, steering]))
+    H_back = get_trmtx(
+        jax.numpy.array([length / 2 - tire_length / 2, working_width / 2 - tire_width / 2, 0])
+    )
+    H = get_trmtx(pose_arr)
+    H = H.dot(H_back).dot(H_steer).dot(H_shift)
+    fl = H.dot(jax.numpy.asarray([[length / 2], [width / 2], [0.0], [1.0]])).flatten()
+    fr = H.dot(
+        jax.numpy.asarray([[length / 2], [working_width / 2 - tire_width], [0.0], [1.0]])
+    ).flatten()
+    rr = H.dot(
+        jax.numpy.asarray(
+            [[length / 2 - tire_length], [working_width / 2 - tire_width], [0.0], [1.0]]
+        )
+    ).flatten()
+    rl = H.dot(
+        jax.numpy.asarray([[length / 2 - tire_length], [working_width / 2], [0.0], [1.0]])
+    ).flatten()
+    rl = rl / rl[3]
+    rr = rr / rr[3]
+    fl = fl / fl[3]
+    fr = fr / fr[3]
+    vertices = jax.numpy.asarray(
+        [
+            [rl[0], rl[1]],
+            [fl[0], fl[1]],
+            [fr[0], fr[1]],
+            [rr[0], rr[1]],
+            [rl[0], rl[1]],
+        ]
+    )
 
     return vertices
 

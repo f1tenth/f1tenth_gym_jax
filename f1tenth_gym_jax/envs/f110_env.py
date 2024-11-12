@@ -194,6 +194,7 @@ class F110Env(MultiAgentEnv):
         # make x_and_u
         x = state.cartesian_states
         us = jnp.array([actions[i] for i in self.agents])
+        # TODO: need to stop collided agents and set input to 0
         x_and_u = jnp.hstack((x, us))
         # integrate dynamics, vmapped
         integrator = jax.vmap(self.integrator_func, in_axes=[None, 0, None])
@@ -234,12 +235,12 @@ class F110Env(MultiAgentEnv):
         # set up following agents in a grid pattern
         s_locs = jnp.linspace(
             first_agent_s,
-            first_agent_s + 0.5 * (self.num_agents - 1),
+            first_agent_s + 1.0 * (self.num_agents - 1),
             self.num_agents,
             endpoint=True,
         )
         ey_locs = first_agent_ey * jnp.where(
-            jnp.arange(self.num_agents) % 2 == 0, 1, -1
+            jnp.arange(self.num_agents) % 2 == 0, 1.5, -1.5
         )
         ephi_locs = jnp.zeros((self.num_agents,))
         initial_states_frenet = jnp.column_stack((s_locs, ey_locs, ephi_locs))

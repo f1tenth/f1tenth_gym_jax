@@ -199,7 +199,8 @@ class F110Env(MultiAgentEnv):
         # integrate dynamics, vmapped
         integrator = jax.vmap(self.integrator_func, in_axes=[None, 0, None])
         new_x_and_u = integrator(self.model_func, x_and_u, self.params)
-        state = state.replace(cartesian_states=new_x_and_u[:, :-2])
+        final_x_and_u = jnp.where(state.collisions[:, None], x_and_u, new_x_and_u)
+        state = state.replace(cartesian_states=final_x_and_u[:, :-2])
         state = jax.lax.cond(
             self.params.produce_scans, self._scan, self._ret_orig_state, state, key
         )
@@ -412,6 +413,9 @@ class F110Env(MultiAgentEnv):
 
         # combine collisions
         full_collisions = jnp.logical_or(padded_collisions, map_collisions)
+
+        # if already collided last step also collided this step
+        full_collisions = jnp.logical_or(full_collisions, state.collisions)
 
         # update state
         state = state.replace(collisions=full_collisions)

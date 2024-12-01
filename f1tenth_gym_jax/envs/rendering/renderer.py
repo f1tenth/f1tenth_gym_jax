@@ -293,6 +293,7 @@ class TrajRenderer:
 
         # update car vertices
         for i in range(self.num_agents):
+            
             vertices = get_vertices(
                 self.traj[self.current_step, self.current_traj, i, [0, 1, 4]],
                 self.env.params.length,
@@ -301,8 +302,7 @@ class TrajRenderer:
             vertices = vertices[[0, 3, 2, 1], :]
             vertices = np.vstack([vertices, vertices[0]])
             self.chassis[i].setData(vertices[:, 0], vertices[:, 1])
-        # update wheel vertices
-        for i in range(self.num_agents):
+        
             fl_vertices = _get_tire_vertices(
                 self.traj[self.current_step, self.current_traj, i, [0, 1, 4]],
                 self.env.params.length,

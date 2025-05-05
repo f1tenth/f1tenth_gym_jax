@@ -178,25 +178,26 @@ def _get_tire_vertices(pose_arr, length, width, tire_width, tire_length, fl, ste
         vertices (np.ndarray, (4, 2)): corner vertices of the vehicle body
     """
     working_width = jax.lax.select(fl, width, -width)
+    working_tire_width = jax.lax.select(fl, tire_width, -tire_width)
 
     H_shift = get_trmtx(
         jax.numpy.array(
-            [-(length / 2 - tire_length / 2), -(working_width / 2 - tire_width / 2), 0]
+            [-(length / 2 - tire_length / 2), -(working_width / 2 - working_tire_width / 2), 0]
         )
     )
     H_steer = get_trmtx(jax.numpy.array([0, 0, steering]))
     H_back = get_trmtx(
-        jax.numpy.array([length / 2 - tire_length / 2, working_width / 2 - tire_width / 2, 0])
+        jax.numpy.array([length / 2 - tire_length / 2, working_width / 2 - working_tire_width / 2, 0])
     )
     H = get_trmtx(pose_arr)
     H = H.dot(H_back).dot(H_steer).dot(H_shift)
-    fl = H.dot(jax.numpy.asarray([[length / 2], [width / 2], [0.0], [1.0]])).flatten()
+    fl = H.dot(jax.numpy.asarray([[length / 2], [working_width / 2], [0.0], [1.0]])).flatten()
     fr = H.dot(
-        jax.numpy.asarray([[length / 2], [working_width / 2 - tire_width], [0.0], [1.0]])
+        jax.numpy.asarray([[length / 2], [working_width / 2 - working_tire_width], [0.0], [1.0]])
     ).flatten()
     rr = H.dot(
         jax.numpy.asarray(
-            [[length / 2 - tire_length], [working_width / 2 - tire_width], [0.0], [1.0]]
+            [[length / 2 - tire_length], [working_width / 2 - working_tire_width], [0.0], [1.0]]
         )
     ).flatten()
     rl = H.dot(

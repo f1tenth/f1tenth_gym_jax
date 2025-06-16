@@ -328,7 +328,7 @@ def vehicle_dynamics_st_switching(x_and_u: chex.Array, params: Param) -> chex.Ar
         ]
     )
     
-    f_ret = jax.lax.select(jnp.abs(V) < 0.1, f_ks, f)
+    f_ret = jax.lax.select(jnp.abs(V) < 1.5, f_ks, f)
 
     return f_ret
 

@@ -14,6 +14,7 @@ authors = [
     "Renukanandan Tumu",
     "Luigi Berducci",
     "Ahmad Amine",
+    "Zirui Zang",
     "Joseph Auckley",
     "Matthew O'Kelly",
     "Aman Sinha",
@@ -27,24 +28,16 @@ packages = [{ include = "f1tenth_gym_jax" }]
 
 [tool.poetry.dependencies]
 python = ">=3.10"
-gymnasium = "^0.29.1"
-numpy = ">=1.18"
-pillow = ">=9.0.1"
-scipy = ">=1.7.3"
-numba = ">=0.55.2"
-PyYAML = ">=5.3.1"
-pygame = "^2.5.2"
-opencv-python = "^4.9.0.80"
-yamldataclassconfig = "^1.5.0"
-requests = "^2.31.0"
-shapely = "^2.0.2"
-jax = { extras = ["cuda12"], version = "^0.4.34" }
+PyYAML = "^6.0.2"
+requests = "^2.32.4"
+jax = {extras = ["cuda12"], version = "^0.6.1"}
 jax-pf = { git = "https://github.com/hzheng40/jax_pf.git" }
-flax = "^0.9.0"
-chex = "^0.1.87"
-pyglet = "^2.0.18"
+flax = "^0.10.6"
+chex = "^0.1.89"
 pyqtgraph = "^0.13.7"
-pyqt6 = "^6.7.1"
+pyqt6 = "^6.9.1"
+pyopengl = "^3.1.9"
+pillow = "^11.2.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.4"

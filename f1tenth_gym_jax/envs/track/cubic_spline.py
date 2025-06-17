@@ -3,68 +3,14 @@ Cubic Spline interpolation using scipy.interpolate
 Provides utilities for position, curvature, yaw, and arclength calculation
 """
 
-import math
-import time
 import numpy as np
 import scipy.optimize as so
 from scipy import interpolate
-from typing import Union, Optional
+from typing import Optional
 from functools import partial
 import jax.numpy as jnp
 import jax
 
-from numba import njit
-@njit(fastmath=False, cache=True)
-def nearest_point_on_trajectory(point: np.ndarray, trajectory: np.ndarray) -> tuple:
-    """
-    Return the nearest point along the given piecewise linear trajectory.
-
-    Same as nearest_point_on_line_segment, but vectorized. This method is quite fast, time constraints should
-    not be an issue so long as trajectories are not insanely long.
-
-        Order of magnitude: trajectory length: 1000 --> 0.0002 second computation (5000fps)
-
-    Parameters
-    ----------
-    point: np.ndarray
-        The 2d point to project onto the trajectory
-    trajectory: np.ndarray
-        The trajectory to project the point onto, shape (N, 2)
-        The points must be unique. If they are not unique, a divide by 0 error will destroy the world
-
-    Returns
-    -------
-    nearest_point: np.ndarray
-        The nearest point on the trajectory
-    distance: float
-        The distance from the point to the nearest point on the trajectory
-    t: float
-    min_dist_segment: int
-        The index of the nearest point on the trajectory
-    """
-    diffs = trajectory[1:, :] - trajectory[:-1, :]
-    l2s = diffs[:, 0] ** 2 + diffs[:, 1] ** 2
-    # this is equivalent to the elementwise dot product
-    # dots = np.sum((point - trajectory[:-1,:]) * diffs[:,:], axis=1)
-    dots = np.empty((trajectory.shape[0] - 1,))
-    for i in range(dots.shape[0]):
-        dots[i] = np.dot((point - trajectory[i, :]), diffs[i, :])
-    t = dots / l2s
-    t[t < 0.0] = 0.0
-    t[t > 1.0] = 1.0
-    # t = np.clip(dots / l2s, 0.0, 1.0)
-    projections = trajectory[:-1, :] + (t * diffs.T).T
-    # dists = np.linalg.norm(point - projections, axis=1)
-    dists = np.empty((projections.shape[0],))
-    for i in range(dists.shape[0]):
-        temp = point - projections[i]
-        dists[i] = np.sqrt(np.sum(temp * temp))
-    min_dist_segment = np.argmin(dists)
-    return (
-        dists[min_dist_segment],
-        t[min_dist_segment],
-        min_dist_segment,
-    )
 
 @partial(jax.jit, static_argnums=(1))
 def nearest_point_on_trajectory_jax(point, trajectory) -> tuple:
@@ -374,7 +320,7 @@ class CubicSplineND:
         ey : float
             lateral deviation for given x, y.
         """
-        ey, t, min_dist_segment = nearest_point_on_trajectory(
+        ey, t, min_dist_segment = nearest_point_on_trajectory_jax(
             np.array([x, y]).astype(np.float32), self.points[:, :2]
         )
         # s = s at closest_point + t
@@ -511,167 +457,3 @@ class CubicSplineND:
             segment = self.find_segment_for_x(s)
             a = self.predict_with_spline(s, segment, 6)[0]
             return a
-        
-class CubicSpline2D:
-    """
-    Cubic CubicSpline2D class
-    Parameters
-    ----------
-    x : list
-        x coordinates for data points.
-    y : list
-        y coordinates for data points.
-    """
-
-    def __init__(self, x, y):
-        self.points = np.c_[x, y]
-        if not np.all(self.points[-1] == self.points[0]):
-            self.points = np.vstack((self.points, self.points[0]))  # Ensure the path is closed
-        self.s = self.__calc_s(self.points[:, 0], self.points[:, 1])
-        # Use scipy CubicSpline to interpolate the points with periodic boundary conditions
-        # This is necessary to ensure the path is continuous
-        self.spline = interpolate.CubicSpline(self.s, self.points, bc_type='periodic')
-
-    def __calc_s(self, x, y):
-        dx = np.diff(x)
-        dy = np.diff(y)
-        self.ds = np.hypot(dx, dy)
-        s = [0]
-        s.extend(np.cumsum(self.ds))
-        return s
-
-    def calc_position(self, s):
-        """
-        calc position
-        Parameters
-        ----------
-        s : float
-            distance from the start point. if `s` is outside the data point's
-            range, return None.
-        Returns
-        -------
-        x : float
-            x position for given s.
-        y : float
-            y position for given s.
-        """
-        return self.spline(s)
-
-    def calc_curvature(self, s):
-        """
-        calc curvature
-        Parameters
-        ----------
-        s : float
-            distance from the start point. if `s` is outside the data point's
-            range, return None.
-        Returns
-        -------
-        k : float
-            curvature for given s.
-        """
-        dx, dy = self.spline(s, 1)
-        ddx, ddy = self.spline(s, 2)
-        k = (ddy * dx - ddx * dy) / ((dx**2 + dy**2) ** (3 / 2))
-        return k
-
-    def calc_yaw(self, s):
-        """
-        calc yaw
-        Parameters
-        ----------
-        s : float
-            distance from the start point. if `s` is outside the data point's
-            range, return None.
-        Returns
-        -------
-        yaw : float
-            yaw angle (tangent vector) for given s.
-        """
-        dx, dy = self.spline(s, 1)
-        yaw = math.atan2(dy, dx)
-        return yaw
-
-    def calc_arclength(self, x, y, s_guess=0.0):
-        """
-        calc arclength
-        Parameters
-        ----------
-        x : float
-            x position.
-        y : float
-            y position.
-        Returns
-        -------
-        s : float
-            distance from the start point for given x, y.
-        ey : float
-            lateral deviation for given x, y.
-        """
-
-        def distance_to_spline(s):
-            x_eval, y_eval = self.spline(s)[0]
-            return np.sqrt((x - x_eval)**2 + (y - y_eval)**2)
-        
-        output = so.fmin(distance_to_spline, s_guess, full_output=True, disp=False)
-        closest_s = output[0][0]
-        absolute_distance = output[1]
-        return closest_s, absolute_distance
-    
-    def calc_arclength_inaccurate(self, x, y, s_guess=0.0):
-        """
-        calc arclength, use nearest_point_on_trajectory
-        Less accuarate and less smooth than calc_arclength but
-        much faster - suitable for lap counting
-        Parameters
-        ----------
-        x : float
-            x position.
-        y : float
-            y position.
-        Returns
-        -------
-        s : float
-            distance from the start point for given x, y.
-        ey : float
-            lateral deviation for given x, y.
-        """
-        ey, t, min_dist_segment = nearest_point_on_trajectory(np.array([x, y]), self.points)
-        # s = s at closest_point + t
-        s = self.s[min_dist_segment] + t * (self.s[min_dist_segment + 1] - self.s[min_dist_segment])
-
-        return s, 0
-
-    def _calc_tangent(self, s):
-        '''
-        calculates the tangent to the curve at a given point
-        Parameters
-        ----------
-        s : float
-            distance from the start point. if `s` is outside the data point's
-            range, return None.
-        Returns
-        -------
-        tangent : float
-            tangent vector for given s.
-        '''
-        dx, dy = self.spline(s, 1)
-        tangent = np.array([dx, dy])
-        return tangent
-
-    def _calc_normal(self, s):
-        '''
-        calculates the normal to the curve at a given point
-        Parameters
-        ----------
-        s : float
-            distance from the start point. if `s` is outside the data point's
-            range, return None.
-        Returns
-        -------
-        normal : float
-            normal vector for given s.
-        '''
-        dx, dy = self.spline(s, 1)
-        normal = np.array([-dy, dx])
-        return normal

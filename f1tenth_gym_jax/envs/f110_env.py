@@ -355,27 +355,29 @@ class F110Env(MultiAgentEnv):
 
     @partial(jax.jit, static_argnums=[0])
     def _scan(self, state: State, key: chex.PRNGKey) -> State:
-        get_scan_vmapped = jax.vmap(
-            partial(
-                get_scan,
-                theta_dis=self.theta_dis,
-                fov=self.fov,
-                num_beams=self.num_beams,
-                theta_index_increment=self.theta_index_increment,
-                sines=self.scan_sines,
-                cosines=self.scan_cosines,
-                eps=self.eps,
-                orig_x=self.orig_x,
-                orig_y=self.orig_y,
-                orig_c=self.orig_c,
-                orig_s=self.orig_s,
-                height=self.height,
-                width=self.width,
-                resolution=self.resolution,
-                dt=self.distance_transform,
-                max_range=self.max_range,
-            ),
-            in_axes=[0],
+        get_scan_vmapped = jax.jit(
+            jax.vmap(
+                partial(
+                    get_scan,
+                    theta_dis=self.theta_dis,
+                    fov=self.fov,
+                    num_beams=self.num_beams,
+                    theta_index_increment=self.theta_index_increment,
+                    sines=self.scan_sines,
+                    cosines=self.scan_cosines,
+                    eps=self.eps,
+                    orig_x=self.orig_x,
+                    orig_y=self.orig_y,
+                    orig_c=self.orig_c,
+                    orig_s=self.orig_s,
+                    height=self.height,
+                    width=self.width,
+                    resolution=self.resolution,
+                    dt=self.distance_transform,
+                    max_range=self.max_range,
+                ),
+                in_axes=[0],
+            )
         )
         scans = get_scan_vmapped(state.cartesian_states[:, [0, 1, 4]])
         noise = jax.random.normal(key, scans.shape) * 0.01

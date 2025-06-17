@@ -1,5 +1,6 @@
 import chex
 from flax import struct
+import jax.numpy as jnp
 
 
 @struct.dataclass
@@ -77,3 +78,13 @@ class Param:
     map_name: str = "Spielberg"  # map for environment
     max_num_laps: int = 1  # maximum number of laps to run before done
     reward_type: str = "time"  # reward type
+
+
+def batchify(x: dict, agent_list, num_actors):
+    x = jnp.stack([x[a] for a in agent_list])
+    return x.reshape((num_actors, -1))
+
+
+def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
+    x = x.reshape((num_actors, num_envs, -1))
+    return {a: x[i] for i, a in enumerate(agent_list)}

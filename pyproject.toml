@@ -27,11 +27,11 @@ documentation = "https://f1tenth-gym.readthedocs.io/en/latest/"
 packages = [{ include = "f1tenth_gym_jax" }]
 
 [tool.poetry.dependencies]
-python = ">=3.10"
+python = "^3.10"
 PyYAML = "^6.0.2"
 requests = "^2.32.4"
 jax = {extras = ["cuda12"], version = "^0.6.1"}
-jax-pf = { git = "https://github.com/hzheng40/jax_pf.git" }
+jax-pf = {git = "https://github.com/hzheng40/jax_pf.git"}
 flax = "^0.10.6"
 chex = "^0.1.89"
 pyqtgraph = "^0.13.7"

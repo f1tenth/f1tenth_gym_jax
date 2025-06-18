@@ -195,6 +195,7 @@ class F110Env(MultiAgentEnv):
         x = state.cartesian_states
         us = jnp.array([actions[i] for i in self.agents])
         # TODO: need to stop collided agents and set input to 0
+        us = jnp.where(state.collisions[:, None], jnp.zeros_like(us), us)
         x_and_u = jnp.hstack((x, us))
         # integrate dynamics, vmapped
         integrator = jax.vmap(self.integrator_func, in_axes=[None, 0, None])

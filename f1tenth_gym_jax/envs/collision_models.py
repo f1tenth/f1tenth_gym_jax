@@ -80,14 +80,12 @@ def collision_map(vertices, pixel_centers):
     Returns:
         collisions (np.ndarray (num_bodies, )): whether each body is in collision with map
     """
-    edges = jnp.roll(vertices, 1, axis=1) - vertices
-    center_p = pixel_centers[:, None, None] - edges
-    cross_prods = jnp.cross(center_p, edges)
-    left_of = jnp.where(cross_prods <= 0, 1.0, 0.0)
-    all_left_of = jnp.sum(left_of, axis=-1)
-    collisions = jnp.where(
-        jnp.sum(jnp.where(all_left_of == 4.0, 1.0, 0.0), axis=0) > 0.0, 1.0, 0.0
-    )
+    edges = jnp.roll(vertices, -1, axis=1) - vertices
+    point_vecs = pixel_centers[:, None, None, :] - vertices[None, :, :, :]
+    cross_prods = jnp.cross(edges[None, :, :, :], point_vecs, axis=-1)
+    inside_each = (cross_prods >= 0.0).astype(jnp.float32)
+    num_inside = jnp.sum(inside_each, axis=-1)
+    collisions = jnp.any(num_inside == 4, axis=0)
     return collisions
 
 

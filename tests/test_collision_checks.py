@@ -91,3 +91,21 @@ class CollisionTests(unittest.TestCase):
         plt.scatter(self.env.pixel_centers[:, 0], self.env.pixel_centers[:, 1], s=1)
         plt.show()
         self.assertTrue(jnp.any(col_map))
+
+    
+    def test_sat(self):
+        # Test known collision case
+        pose1 = jnp.array([0.0, 0.0, 0.6])
+        pose2 = jnp.array([0.1, 0.0, 0.0])
+        vert1 = get_vertices(pose1, self.length, self.width)
+        vert2 = get_vertices(pose2, self.length, self.width)
+        pair_vert = jnp.concatenate((vert1, vert2), axis=-1)[jnp.newaxis, ...]
+        col = jax.vmap(collision, in_axes=[0])(pair_vert)
+        self.assertTrue(col[0])
+
+        # Test known non-collision case
+        pose3 = jnp.array([1.0, 1.0, 0.0])
+        vert3 = get_vertices(pose3, self.length, self.width)
+        pair_vert2 = jnp.concatenate((vert1, vert3), axis=-1)[jnp.newaxis, ...]
+        col2 = jax.vmap(collision, in_axes=[0])(pair_vert2)
+        self.assertFalse(col2[0])

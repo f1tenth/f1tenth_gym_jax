@@ -165,7 +165,7 @@ class MPPI:
         return cost  # [n_samples, n_steps]
 
     @partial(jax.jit, static_argnums=(0))
-    def iteration_step(self, a_opt, rng_da, dyn_state):
+    def iteration_step(self, rng_da, dyn_state):
 
         # Step 1: sample controls uniformly
         rng_da, rng_da_split1 = jax.random.split(rng_da)
@@ -204,10 +204,9 @@ def main():
     num_agents = 3
     num_envs = 10
     num_actors = num_agents * num_envs
+    num_states = 7
 
     env = make(f"Spielberg_{num_agents}_noscan_time_v0")
-    line = env.track.raceline
-    waypoints = jnp.vstack((line.xs, line.ys, line.vxs)).T
 
     rng = jax.random.key(0)
     rng2 = jax.random.key(1)
@@ -227,13 +226,14 @@ def main():
     # Initialize the state
     mppi.init_state()
 
-
+    @jax.jit
     def _env_init():
         rng, _rng = jax.random.split(rng2)
         reset_rng = jax.random.split(_rng, num_envs)
         obsv, env_state = jax.vmap(env.reset)(reset_rng)
         return (env_state, obsv, rng)
-    
+
+    @jax.jit
     def _env_step(runner_state, unused):
         env_state, last_obsv, rng = runner_state
         rng, _rng = jax.random.split(rng)
@@ -241,12 +241,17 @@ def main():
 
         # Get the current state of the vehicle
         batched_obs = batchify(last_obsv, env.agents, num_actors)
-        batched_actions = jax.vmap(mppi.iteration_step, in_axes=(0, None))(mppi.a_opt, mppi.rng)
+        dyn_states = batched_obs[..., :7]
+        batched_actions, batched_states, batched_opt_states, batched_rng = jax.vmap(
+            mppi.iteration_step, in_axes=(0, 0)
+        )(rng, dyn_states)
 
         # Unbatch the actions to match the environment's expected input
         env_actions = unbatchify(batched_actions, env.agents, num_envs, num_agents)
 
-        obsv, env_state, _, _, info = jax.vmap(env.step)(step_rngs, env_state, env_actions)
+        obsv, env_state, _, _, info = jax.vmap(env.step)(
+            step_rngs, env_state, env_actions
+        )
         runner_state = (env_state, obsv, rng)
         return runner_state, runner_state
 

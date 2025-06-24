@@ -12,12 +12,9 @@ from f1tenth_gym_jax import make
 from f1tenth_gym_jax.envs.utils import batchify, unbatchify
 from f1tenth_gym_jax.envs.rendering.renderer import TrajRenderer
 
-
 @jax.jit
-def wrap_to_pi(angle):
-    """Wrap to [-π, π)."""
-    return (angle + jnp.pi) % (2 * jnp.pi) - jnp.pi
-
+def wrap_2pi_to_pi(angle):
+    return jnp.arctan2(jnp.sin(angle), jnp.cos(angle))
 
 @jax.jit
 def pure_pursuit(pose, waypoints, lookahead_distance=0.8, wheelbase=0.33):
@@ -27,14 +24,14 @@ def pure_pursuit(pose, waypoints, lookahead_distance=0.8, wheelbase=0.33):
     closest_idx = jnp.argmin(dists)
 
     bearings = jnp.arctan2(dy, dx)
-    rel_angles = bearings - pose[2]
+    rel_angles = bearings - wrap_2pi_to_pi(pose[2])
 
     mask = (dists > lookahead_distance) & (jnp.abs(rel_angles) <= jnp.pi / 2)
     idxs = jnp.arange(waypoints.shape[0])
     valid_idxs = jnp.where(mask, idxs, closest_idx)
     idx_target = jnp.min(valid_idxs)
     x_t, y_t, _ = waypoints[idx_target]
-    alpha = wrap_to_pi(jnp.arctan2(y_t - pose[1], x_t - pose[0]) - pose[2])
+    alpha = jnp.arctan2(y_t - pose[1], x_t - pose[0]) - pose[2]
     steering = jnp.arctan2(2 * wheelbase * jnp.sin(alpha), lookahead_distance)
     velocity = waypoints[closest_idx, 2]
     return jnp.array([steering, velocity])

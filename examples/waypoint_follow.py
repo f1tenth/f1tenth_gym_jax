@@ -12,28 +12,41 @@ from f1tenth_gym_jax import make
 from f1tenth_gym_jax.envs.utils import batchify, unbatchify
 from f1tenth_gym_jax.envs.rendering.renderer import TrajRenderer
 
-@jax.jit
-def wrap_2pi_to_pi(angle):
-    return jnp.arctan2(jnp.sin(angle), jnp.cos(angle))
+from f1tenth_gym_jax.envs.track.cubic_spline import (
+    nearest_point_on_trajectory_jax,
+    first_point_on_trajectory,
+)
+
 
 @jax.jit
 def pure_pursuit(pose, waypoints, lookahead_distance=0.8, wheelbase=0.33):
-    dx = waypoints[:, 0] - pose[0]
-    dy = waypoints[:, 1] - pose[1]
-    dists = jnp.hypot(dx, dy)
-    closest_idx = jnp.argmin(dists)
+    nearest_dist, t, i = nearest_point_on_trajectory_jax(pose[:2], waypoints[:, :2])
+    i2, lookahead_point, dist2 = first_point_on_trajectory(
+        pose[:2], waypoints[:, :2], lookahead_distance
+    )
 
-    bearings = jnp.arctan2(dy, dx)
-    rel_angles = bearings - wrap_2pi_to_pi(pose[2])
-
-    mask = (dists > lookahead_distance) & (jnp.abs(rel_angles) <= jnp.pi / 2)
-    idxs = jnp.arange(waypoints.shape[0])
-    valid_idxs = jnp.where(mask, idxs, closest_idx)
-    idx_target = jnp.min(valid_idxs)
-    x_t, y_t, _ = waypoints[idx_target]
-    alpha = jnp.arctan2(y_t - pose[1], x_t - pose[0]) - pose[2]
-    steering = jnp.arctan2(2 * wheelbase * jnp.sin(alpha), lookahead_distance)
-    velocity = waypoints[closest_idx, 2]
+    waypoint_y = jnp.dot(
+        jnp.array([jnp.sin(-pose[2]), jnp.cos(-pose[2])]),
+        lookahead_point - pose[:2],
+    )
+    velocity = waypoints[i, 2]
+    radius = 1.0 / (2.0 * waypoint_y / lookahead_distance**2)
+    steering = jnp.arctan(wheelbase/radius)
+    steering = jax.lax.select(jnp.abs(waypoint_y) < 1e-6, 0.0, steering)
+    # jax.debug.print(
+    #     "Pure Pursuit: current_pose={pose}, nearest_dist={nearest_dist}, t={t}, i={i}, "
+    #     "lookahead_point={lookahead_point}, waypoint_y={waypoint_y}, "
+    #     "velocity={velocity}, radius={radius}, steering={steering}",
+    #     pose=pose,
+    #     nearest_dist=nearest_dist,
+    #     t=t,
+    #     i=i,
+    #     lookahead_point=lookahead_point,
+    #     waypoint_y=waypoint_y,
+    #     velocity=velocity,
+    #     radius=radius,
+    #     steering=steering,
+    # )
     return jnp.array([steering, velocity])
 
 
@@ -43,10 +56,9 @@ def main():
     num_envs = 10
     num_actors = num_agents * num_envs
 
-    env = make(f"Spielberg_{num_agents}_noscan_time_v0")
+    env = make(f"Monza_{num_agents}_noscan_time_v0")
     l = env.track.raceline
     waypoints = jnp.vstack((l.xs, l.ys, l.vxs)).T
-
     rng = jax.random.key(0)
 
     @jax.jit

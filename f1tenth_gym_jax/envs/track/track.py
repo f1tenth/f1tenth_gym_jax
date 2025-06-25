@@ -316,6 +316,7 @@ class Track:
         s = s % self.s_frame_max
         x, y = self.centerline.calc_position_jax(s)
         psi = self.centerline.calc_yaw_jax(s)
+        jax.debug.print("psi={psi}, x={x}, y={y}", psi=psi, x=x, y=y)
 
         # Adjust x,y by shifting along the normal vector
         x -= ey * jnp.sin(psi)

@@ -14,6 +14,8 @@ from f1tenth_gym_jax.envs.dynamic_models import (
 from f1tenth_gym_jax.envs.utils import batchify, unbatchify, Param
 from f1tenth_gym_jax.envs.track.cubic_spline import nearest_point_on_trajectory_jax
 
+from f1tenth_gym_jax.envs.rendering.renderer import TrajRenderer
+
 
 @dataclass
 class MPPIConfig:
@@ -228,14 +230,24 @@ def main():
 
     @jax.jit
     def _env_init():
-        rng, _rng = jax.random.split(rng2)
+        rng, _rng, __rng = jax.random.split(rng2, 3)
         reset_rng = jax.random.split(_rng, num_envs)
         obsv, env_state = jax.vmap(env.reset)(reset_rng)
-        return (env_state, obsv, rng)
+        dummy_bs = jnp.zeros((num_actors, num_states))
+        dummy_bos = jnp.zeros((num_actors, num_states))
+        init_rng = jax.random.split(__rng, num_actors)
+        return (env_state, obsv, dummy_bs, dummy_bos, init_rng, rng)
 
     @jax.jit
     def _env_step(runner_state, unused):
-        env_state, last_obsv, rng = runner_state
+        (
+            env_state,
+            last_obsv,
+            last_batched_states,
+            last_batched_opt_states,
+            last_batched_rng,
+            rng,
+        ) = runner_state
         rng, _rng = jax.random.split(rng)
         step_rngs = jax.random.split(_rng, num_envs)
 
@@ -244,7 +256,7 @@ def main():
         dyn_states = batched_obs[..., :7]
         batched_actions, batched_states, batched_opt_states, batched_rng = jax.vmap(
             mppi.iteration_step, in_axes=(0, 0)
-        )(rng, dyn_states)
+        )(last_batched_rng, dyn_states)
 
         # Unbatch the actions to match the environment's expected input
         env_actions = unbatchify(batched_actions, env.agents, num_envs, num_agents)
@@ -255,10 +267,10 @@ def main():
         runner_state = (env_state, obsv, rng)
         return runner_state, runner_state
 
-    # Example of running an iteration step
-    a_opt, states, opt_states, rng_da = mppi.iteration_step(
-        mppi.a_opt, mppi.rng, env.reset()[1]
-    )
+    final_runner, all_runner_state = jax.lax.scan(_env_step, _env_init(), length=1000)
+
+    player = TrajRenderer(env)
+    player.render(np.array(all_runner_state[0].cartesian_states))
 
 
 if __name__ == "__main__":

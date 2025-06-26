@@ -8,7 +8,7 @@ import yaml
 from PIL import Image
 from PIL.Image import Transpose
 
-from .cubic_spline import CubicSplineND
+from .cubic_spline import CubicSplineND, _calc_yaw_from_xy
 from .utils import find_track_dir
 
 
@@ -129,9 +129,11 @@ class Track:
                 cl_data.shape[1] == 4
             ), "expected centerline columns as [x, y, w_left, w_right]"
             cl_xs, cl_ys = cl_data[:, 0], cl_data[:, 1]
+            cl_psis = _calc_yaw_from_xy(cl_xs, cl_ys)
             cl_xs = np.append(cl_xs, cl_xs[0])
             cl_ys = np.append(cl_ys, cl_ys[0])
-            centerline = CubicSplineND(cl_xs, cl_ys)
+            cl_psis = np.append(cl_psis, cl_psis[0])
+            centerline = CubicSplineND(cl_xs, cl_ys, cl_psis)
         else:
             raise ValueError("At least centerline file is expected to construct track.")
             centerline = None
@@ -316,7 +318,6 @@ class Track:
         s = s % self.s_frame_max
         x, y = self.centerline.calc_position_jax(s)
         psi = self.centerline.calc_yaw_jax(s)
-        jax.debug.print("psi={psi}, x={x}, y={y}", psi=psi, x=x, y=y)
 
         # Adjust x,y by shifting along the normal vector
         x -= ey * jnp.sin(psi)

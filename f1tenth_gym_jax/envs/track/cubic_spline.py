@@ -49,6 +49,12 @@ def first_point_on_trajectory(
 
     return idx, closest_point, dist
 
+@jax.jit
+def _calc_yaw_from_xy(x, y):
+    dx_dt = jnp.gradient(x)
+    dy_dt = jnp.gradient(y)
+    heading = jnp.arctan2(dy_dt, dx_dt)
+    return heading
 
 class CubicSplineND:
     """
@@ -331,12 +337,6 @@ class CubicSplineND:
         segment = self.find_segment_for_x_jax(s)
         cos = self.predict_with_spline_jax(s, segment, 2)[0]
         sin = self.predict_with_spline_jax(s, segment, 3)[0]
-        jax.debug.print(
-            "calc_yaw_jax: cos={cos}, sin={sin}, segment={segment}",
-            cos=cos,
-            sin=sin,
-            segment=segment,
-        )
         yaw = jnp.arctan2(sin, cos)
         return yaw
 

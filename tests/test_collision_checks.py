@@ -99,7 +99,7 @@ class CollisionTests(unittest.TestCase):
         pose2 = jnp.array([0.1, 0.0, 0.0])
         vert1 = get_vertices(pose1, self.length, self.width)
         vert2 = get_vertices(pose2, self.length, self.width)
-        pair_vert = jnp.concatenate((vert1, vert2), axis=-1)[jnp.newaxis, ...]
+        pair_vert = jnp.concatenate((vert1, vert2), axis=-1)[jnp.newaxis, ...]        
         col = jax.vmap(collision, in_axes=[0])(pair_vert)
         self.assertTrue(col[0])
 

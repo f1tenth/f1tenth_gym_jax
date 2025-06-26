@@ -233,7 +233,7 @@ class F110Env(MultiAgentEnv):
         # randomly choose first agent location [0, 1] on entire arc length
         first_agent_s_loc = jax.random.uniform(s_key)
         first_agent_s = first_agent_s_loc * self.track.length
-        first_agent_ey = jax.random.uniform(ey_key, minval=-0.15, maxval=0.15)
+        first_agent_ey = jax.random.uniform(ey_key, minval=-0.3, maxval=0.3)
         # set up following agents in a grid pattern
         s_locs = jnp.linspace(
             first_agent_s,
@@ -247,10 +247,7 @@ class F110Env(MultiAgentEnv):
         ephi_locs = jnp.zeros((self.num_agents,))
         initial_states_frenet = jnp.column_stack((s_locs, ey_locs, ephi_locs))
         initial_poses = self.track.vmap_frenet_to_cartesian_jax(initial_states_frenet)
-        jax.debug.print(
-            "Initial poses: {initial_poses}",
-            initial_poses=initial_poses,
-        )
+        
         initial_states = jnp.zeros((self.num_agents, self.state_size))
         initial_states = initial_states.at[:, [0, 1, 4]].set(initial_poses)
 
@@ -412,7 +409,7 @@ class F110Env(MultiAgentEnv):
             -1 * jnp.ones((len(pairwise_indices1), 2), dtype=int),
         ).flatten()
         padded_collisions = jnp.zeros((self.num_agents + 1,))
-        padded_collisions.at[collided_ind].set(1)
+        padded_collisions = padded_collisions.at[collided_ind].set(1)
         padded_collisions = padded_collisions[:-1]
 
         # check map collisions (n_agent, )

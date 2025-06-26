@@ -56,8 +56,8 @@ class TrajRenderer:
         self.render_fps = render_fps
 
         self.thickness = 1.0
-        self.wheel_length = 0.2
-        self.wheel_width = 0.1
+        self.wheel_length = 0.1
+        self.wheel_width = 0.05
 
         # create the canvas
         self.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])

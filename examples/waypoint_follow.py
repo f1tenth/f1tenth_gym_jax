@@ -74,7 +74,6 @@ def main():
 
     player = TrajRenderer(env)
     player.render(np.array(all_runner_state[0].cartesian_states))
-    print(jnp.any(all_runner_state[0].collisions))
 
 
 if __name__ == "__main__":

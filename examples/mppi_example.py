@@ -7,11 +7,9 @@ from typing import Callable
 
 from f1tenth_gym_jax import make
 from f1tenth_gym_jax.envs import F110Env
-from f1tenth_gym_jax.envs.dynamic_models import (
-    vehicle_dynamics_ks,
-    vehicle_dynamics_st_switching,
-)
-from f1tenth_gym_jax.envs.utils import batchify, unbatchify, Param
+from f1tenth_gym_jax.envs.dynamic_models import vehicle_dynamics_st_smooth
+from f1tenth_gym_jax.envs.integrator import integrate_rk4
+from f1tenth_gym_jax.envs.utils import batchify, unbatchify
 from f1tenth_gym_jax.envs.track.cubic_spline import nearest_point_on_trajectory_jax
 
 from f1tenth_gym_jax.envs.rendering.renderer import TrajRenderer
@@ -25,12 +23,14 @@ class MPPIConfig:
     n_samples: int = 256
     temperature: float = 0.01
     damping: float = 0.001
+    dt: float = 0.1
 
     # system
-    control_dim: int = 2
+    control_dim: int = 2 # [steering_velocity, longitudinal_acceleration]
+    state_dim: int = 7 # [x, y, delta, v, psi, psi_dot, beta]
     control_limit: jax.Array = jnp.array([[-3.2, -10.0], [3.2, 10.0]])
-    dyn_fn: Callable = vehicle_dynamics_ks
-    dt: 0.1
+    dyn_fn: Callable = vehicle_dynamics_st_smooth
+    int_fn: Callable = integrate_rk4
 
 
 @jax.jit
@@ -98,14 +98,8 @@ class MPPI:
         self.n_iterations = config.n_iterations
         self.n_steps = config.n_steps
         self.n_samples = config.n_samples
-        self.a_std = jnp.array(config.control_sample_std)
-        self.a_cov_shift = config.a_cov_shift
-        self.adaptive_covariance = (
-            config.adaptive_covariance and self.n_iterations > 1
-        ) or self.a_cov_shift
         self.a_shape = config.control_dim
 
-        self.init_state()
         self.accum_matrix = jnp.triu(jnp.ones((self.n_steps, self.n_steps)))
 
         line = self.env.track.raceline
@@ -113,21 +107,6 @@ class MPPI:
         self.waypoint_distances = jnp.linalg.norm(
             self.waypoints[1:, :2] - self.waypoints[:-1, :2], axis=1
         )
-
-    def init_state(self):
-        dim_a = jnp.prod(self.a_shape)
-        self.rng, _rng = jax.random.split(self.rng)
-        self.a_opt = 0.0 * jax.random.uniform(_rng, shape=(self.n_steps, dim_a))
-
-        # a_cov: [n_steps, dim_a, dim_a]
-        if self.a_cov_shift:
-            self.a_cov = (self.a_std**2) * jnp.tile(
-                jnp.eye(dim_a), (self.n_steps, 1, 1)
-            )
-            self.a_cov_init = self.a_cov.copy()
-        else:
-            self.a_cov = None
-            self.a_cov_init = None
 
     @partial(jax.jit, static_argnums=(0))
     def weights(self, R):
@@ -137,17 +116,24 @@ class MPPI:
         w = w / jnp.sum(w)  # [n_samples] np.float32
         return w
 
-    @partial(jax.jit, static_argnums=0)
+    @partial(jax.jit, static_argnums=(0))
     def rollout(self, actions, dyn_state):
-        def _step_dyn(curr_state, actions):
-            next_state = curr_state + self.dyn_fn(curr_state, actions)
+        # actions: [n_steps, dim_a]
+        # dyn_state: [dim_s]
+        
+        def _step_dyn(x, u):
+            # x: [dim_s]
+            # u: [dim_a]
+            x_and_u = jnp.hstack((x, u))
+            new_x_and_u = self.config.int_fn(self.config.dyn_fn, x_and_u, self.env.params)
+            next_state = new_x_and_u[:-self.config.control_dim]  # [dim_s]
             return next_state, next_state
 
         _, state_traj = jax.lax.scan(_step_dyn, dyn_state, actions)
         return state_traj
 
-    @partial(jax.jit, static_argnums=(0))
-    def get_ref(self, state, n_steps=10):
+    @partial(jax.jit, static_argnums=(0, 2))
+    def get_ref(self, state, n_steps):
         dist, t, ind = nearest_point_on_trajectory_jax(
             jnp.array([state[0], state[1]]), self.waypoints[:, :2]
         )
@@ -157,13 +143,13 @@ class MPPI:
         )
         return reference, ind
 
-    @partial(jax.jit, static_argnums=0)
+    @partial(jax.jit, static_argnums=(0))
     def cost(self, states, reference_traj):
         # states: [n_samples, n_steps, dim_s]
         # reference_traj: [n_steps, dim_s]
         # cost is the squared distance to the reference trajectory
-        ref_states = jnp.tile(reference_traj[None, :, :], (self.n_samples, 1, 1))
-        cost = jnp.sum((states - ref_states) ** 2, axis=-1)
+        # ref_states = jnp.tile(reference_traj[None, :, :], (self.n_samples, 1, 1))
+        cost = jnp.sum((states - reference_traj) ** 2, axis=-1)
         return cost  # [n_samples, n_steps]
 
     @partial(jax.jit, static_argnums=(0))
@@ -182,11 +168,10 @@ class MPPI:
         states = jax.vmap(self.rollout, in_axes=(0, None))(actions, dyn_state)
 
         # Step 3: compute costs
-        ref, ind = self.get_ref(dyn_state)
+        ref, ind = self.get_ref(dyn_state, n_steps=self.n_steps-1)
         cost = jax.vmap(self.cost, in_axes=(0, None))(
             states, ref
         )  # [n_samples, n_steps]
-
         R = jnp.einsum("ij,jj->ij", cost, self.accum_matrix)  # [n_samples, n_steps]
         w = jax.vmap(self.weights, 1, 1)(R)  # [n_samples, n_steps]
         a_opt = jax.vmap(jnp.average, (1, None, 1))(actions, 0, w)  # [n_steps, dim_a]
@@ -213,20 +198,9 @@ def main():
     rng = jax.random.key(0)
     rng2 = jax.random.key(1)
 
-    config = MPPIConfig(
-        n_iterations=10,
-        n_steps=20,
-        n_samples=256,
-        control_sample_std=0.1,
-        control_limit=jnp.array([[-3.2, -10.0], [3.2, 10.0]]),
-        dyn_fn=vehicle_dynamics_ks,
-        dt=0.1,
-    )
+    config = MPPIConfig()
 
     mppi = MPPI(config, env, rng)
-
-    # Initialize the state
-    mppi.init_state()
 
     @jax.jit
     def _env_init():

@@ -4,6 +4,7 @@ from functools import partial
 
 # jax
 import jax
+import jax.numpy as jnp
 import chex
 
 # local
@@ -21,6 +22,7 @@ def integrate_rk4(f: Callable, x_and_u: chex.Array, params: Param) -> chex.Array
     k4 = f(k4_state, params)
     # dynamics integration
     x_and_u = x_and_u + params.timestep * (1 / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
+    x_and_u = x_and_u.at[4].set(jnp.arctan2(jnp.sin(x_and_u[4]), jnp.cos(x_and_u[4])))
     return x_and_u
 
 
@@ -28,4 +30,5 @@ def integrate_rk4(f: Callable, x_and_u: chex.Array, params: Param) -> chex.Array
 def integrate_euler(f: Callable, x_and_u: chex.Array, params: Param) -> chex.Array:
     dstate = f(x_and_u, params)
     x_and_u = x_and_u + params.timestep * dstate
+    x_and_u = x_and_u.at[4].set(jnp.arctan2(jnp.sin(x_and_u[4]), jnp.cos(x_and_u[4])))
     return x_and_u

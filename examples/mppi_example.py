@@ -1,13 +1,18 @@
+import os
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".99"
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 from functools import partial
-from flax.struct import dataclass
+from flax import struct
+import chex
+
 from typing import Callable
 
 from f1tenth_gym_jax import make
 from f1tenth_gym_jax.envs import F110Env
-from f1tenth_gym_jax.envs.dynamic_models import vehicle_dynamics_st_smooth
+from f1tenth_gym_jax.envs.dynamic_models import vehicle_dynamics_st_switching
 from f1tenth_gym_jax.envs.integrator import integrate_rk4
 from f1tenth_gym_jax.envs.utils import batchify, unbatchify
 from f1tenth_gym_jax.envs.track.cubic_spline import nearest_point_on_trajectory_jax
@@ -15,22 +20,24 @@ from f1tenth_gym_jax.envs.track.cubic_spline import nearest_point_on_trajectory_
 from f1tenth_gym_jax.envs.rendering.renderer import TrajRenderer
 
 
-@dataclass
+@struct.dataclass
 class MPPIConfig:
     # mppi
     n_iterations: int = 1
     n_steps: int = 10
-    n_samples: int = 256
+    n_samples: int = 128
     temperature: float = 0.01
     damping: float = 0.001
     dt: float = 0.1
 
     # system
-    control_dim: int = 2 # [steering_velocity, longitudinal_acceleration]
-    state_dim: int = 7 # [x, y, delta, v, psi, psi_dot, beta]
-    control_limit: jax.Array = jnp.array([[-3.2, -10.0], [3.2, 10.0]])
-    dyn_fn: Callable = vehicle_dynamics_st_smooth
+    control_dim: int = 2  # [steering_velocity, longitudinal_acceleration]
+    state_dim: int = 7  # [x, y, delta, v, psi, psi_dot, beta]
+    dyn_fn: Callable = vehicle_dynamics_st_switching
     int_fn: Callable = integrate_rk4
+    control_limit: chex.Array = struct.field(
+        default_factory=lambda: jnp.array([[-3.2, -10.0], [3.2, 10.0]])
+    )
 
 
 @jax.jit
@@ -120,13 +127,15 @@ class MPPI:
     def rollout(self, actions, dyn_state):
         # actions: [n_steps, dim_a]
         # dyn_state: [dim_s]
-        
+
         def _step_dyn(x, u):
             # x: [dim_s]
             # u: [dim_a]
             x_and_u = jnp.hstack((x, u))
-            new_x_and_u = self.config.int_fn(self.config.dyn_fn, x_and_u, self.env.params)
-            next_state = new_x_and_u[:-self.config.control_dim]  # [dim_s]
+            new_x_and_u = self.config.int_fn(
+                self.config.dyn_fn, x_and_u, self.env.params
+            )
+            next_state = new_x_and_u[: -self.config.control_dim]  # [dim_s]
             return next_state, next_state
 
         _, state_traj = jax.lax.scan(_step_dyn, dyn_state, actions)
@@ -168,7 +177,7 @@ class MPPI:
         states = jax.vmap(self.rollout, in_axes=(0, None))(actions, dyn_state)
 
         # Step 3: compute costs
-        ref, ind = self.get_ref(dyn_state, n_steps=self.n_steps-1)
+        ref, ind = self.get_ref(dyn_state, n_steps=self.n_steps - 1)
         cost = jax.vmap(self.cost, in_axes=(0, None))(
             states, ref
         )  # [n_samples, n_steps]
@@ -180,11 +189,6 @@ class MPPI:
 
         return a_opt, states, opt_states, rng_da
 
-
-# TODOs:
-# 1. uniform sampling instead of truncated normal
-# 2. remove inferenv, use explicit functions for dynamics and rewards
-# 3.
 
 
 def main():
@@ -207,8 +211,8 @@ def main():
         rng, _rng, __rng = jax.random.split(rng2, 3)
         reset_rng = jax.random.split(_rng, num_envs)
         obsv, env_state = jax.vmap(env.reset)(reset_rng)
-        dummy_bs = jnp.zeros((num_actors, num_states))
-        dummy_bos = jnp.zeros((num_actors, num_states))
+        dummy_bs = jnp.zeros((num_actors, config.n_samples, config.n_steps, num_states))
+        dummy_bos = jnp.zeros((num_actors, config.n_steps, num_states))
         init_rng = jax.random.split(__rng, num_actors)
         return (env_state, obsv, dummy_bs, dummy_bos, init_rng, rng)
 
@@ -228,17 +232,29 @@ def main():
         # Get the current state of the vehicle
         batched_obs = batchify(last_obsv, env.agents, num_actors)
         dyn_states = batched_obs[..., :7]
+
+        # batched_actions [num_actors, num_steps, dim_a]
+        # batched_states [num_actors, num_samples, num_steps, dim_s]
+        # batched_opt_states [num_actors, num_steps, dim_s]
         batched_actions, batched_states, batched_opt_states, batched_rng = jax.vmap(
             mppi.iteration_step, in_axes=(0, 0)
         )(last_batched_rng, dyn_states)
 
+        current_action = batched_actions[:, 0, :]
         # Unbatch the actions to match the environment's expected input
-        env_actions = unbatchify(batched_actions, env.agents, num_envs, num_agents)
+        env_actions = unbatchify(current_action, env.agents, num_envs, num_agents)
 
         obsv, env_state, _, _, info = jax.vmap(env.step)(
             step_rngs, env_state, env_actions
         )
-        runner_state = (env_state, obsv, rng)
+        runner_state = (
+            env_state,
+            obsv,
+            batched_states,
+            batched_opt_states,
+            batched_rng,
+            rng,
+        )
         return runner_state, runner_state
 
     final_runner, all_runner_state = jax.lax.scan(_env_step, _env_init(), length=1000)

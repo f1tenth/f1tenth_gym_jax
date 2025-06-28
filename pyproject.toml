@@ -30,7 +30,7 @@ packages = [{ include = "f1tenth_gym_jax" }]
 python = "^3.10"
 PyYAML = "^6.0.2"
 requests = "^2.32.4"
-jax = {extras = ["cuda12"], version = "^0.6.1"}
+jax = {extras = ["cuda12"], version = "^0.6.2"}
 jax-pf = {git = "https://github.com/hzheng40/jax_pf.git"}
 flax = "^0.10.6"
 chex = "^0.1.89"

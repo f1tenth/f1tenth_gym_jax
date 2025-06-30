@@ -74,7 +74,6 @@ class Param:
     eps: float = 0.01  # epsilon to stop ray marching, scan param
     max_range: float = 10.0  # max range of scan, scan param
     observe_others: bool = True  # whether can observe other agents
-    num_rays: float = 1000  # number of rays in each scan
     map_name: str = "Spielberg"  # map for environment
     max_num_laps: int = 1  # maximum number of laps to run before done
     reward_type: str = "time"  # reward type

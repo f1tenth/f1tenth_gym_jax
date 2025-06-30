@@ -103,7 +103,7 @@ class F110Env(MultiAgentEnv):
 
         # scanning or not
         if params.produce_scans:
-            self.scan_size = params.num_rays
+            self.scan_size = params.num_beams
         else:
             self.scan_size = 0
 

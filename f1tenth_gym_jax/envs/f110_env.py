@@ -207,7 +207,7 @@ class F110Env(MultiAgentEnv):
         )
 
         # 2. collisions
-        state = self._collisions(state)
+        state = jax.lax.cond(self.params.collision_on, self._collisions, self._ret_orig_state, state)
 
         # 2. get obs
         obs = self.get_obs(state)
@@ -247,7 +247,7 @@ class F110Env(MultiAgentEnv):
         ephi_locs = jnp.zeros((self.num_agents,))
         initial_states_frenet = jnp.column_stack((s_locs, ey_locs, ephi_locs))
         initial_poses = self.track.vmap_frenet_to_cartesian_jax(initial_states_frenet)
-        
+
         initial_states = jnp.zeros((self.num_agents, self.state_size))
         initial_states = initial_states.at[:, [0, 1, 4]].set(initial_poses)
 
@@ -351,7 +351,7 @@ class F110Env(MultiAgentEnv):
         return {a: reward(i) for i, a in enumerate(self.agents)}
 
     @partial(jax.jit, static_argnums=[0])
-    def _ret_orig_state(self, state: State, key: chex.PRNGKey) -> State:
+    def _ret_orig_state(self, state: State, key: chex.PRNGKey=None) -> State:
         new_state = state.replace(scans=jnp.zeros((self.num_agents, self.num_beams)))
         return new_state
 

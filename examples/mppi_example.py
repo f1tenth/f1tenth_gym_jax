@@ -213,7 +213,7 @@ def main():
     num_actors = num_agents * num_envs
     num_states = 7
 
-    env = make(f"Spielberg_{num_agents}_noscan_time_v0")
+    env = make(f"Spielberg_{num_agents}_noscan_collision_time_v0")
 
     rng = jax.random.key(0)
     rng2 = jax.random.key(1)

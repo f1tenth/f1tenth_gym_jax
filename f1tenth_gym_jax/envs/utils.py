@@ -68,6 +68,7 @@ class Param:
     integrator: str = "rk4"  # dynamics integrator
     model: str = "st"  # dynamics model type
     produce_scans: bool = False  # whether to turn on laser scan
+    collision_on: bool = True  # whether to turn on collision detection
     theta_dis: int = 2000  # number of discretization in theta, scan param
     fov: float = 4.7  # field of view of the scan, scan param
     num_beams: int = 64  # number of beams in each scan, scan param

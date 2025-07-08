@@ -306,8 +306,11 @@ class F110Env(MultiAgentEnv):
                     relative_poses[:, 2],
                 )
             ).flatten()
-
-            all_states = jnp.hstack((agent_state, relative_states, agent_scan))
+            
+            if self.params.produce_scans:
+                all_states = jnp.hstack((agent_state, relative_states, agent_scan))
+            else:
+                all_states = jnp.hstack((agent_state, relative_states))
             return all_states
 
         return {a: observation(i, self.num_agents) for i, a in enumerate(self.agents)}

@@ -1,54 +1,74 @@
+[project]
+name = "f1tenth_gym_jax"
+version = "1.0.0dev"
+description = "JAX-compatible Gym environment for F1TENTH"
+authors = [
+    { name = "Hongrui Zheng" },
+    { name = "Renukanandan Tumu" },
+    { name = "Luigi Berducci" },
+    { name = "Ahmad Amine" },
+    { name = "Zirui Zang" },
+    { name = "Joseph Auckley" },
+    { name = "Matthew O'Kelly" },
+    { name = "Aman Sinha" },
+]
+requires-python = "~=3.10"
+readme = "README.md"
+license = "MIT"
+maintainers = [{ name = "Hongrui Zheng" }]
+dependencies = [
+    "PyYAML>=6.0.2,<7",
+    "requests>=2.32.4,<3",
+    "jax[cuda12]>=0.6.2,<0.7",
+    "flax>=0.10.6,<0.11",
+    "chex>=0.1.89,<0.2",
+    "pyqtgraph>=0.13.7,<0.14",
+    "pyqt6>=6.9.1,<7",
+    "pyopengl>=3.1.9,<4",
+    "pillow>=11.2.1,<12",
+    "jax-pf",
+]
+
+[project.urls]
+Homepage = "https://f1tenth.org"
+Repository = "https://github.com/f1tenth/f1tenth_gym_jax"
+Documentation = "https://f1tenth-gym.readthedocs.io/en/latest/"
+
+[project.optional-dependencies]
+rl = [
+    "distrax>=0.1.5",
+    "safetensors>=0.5.3",
+    "tqdm>=4.67.1",
+    "wandb>=0.21.0",
+]
+
 [tool.pytest.ini_options]
 minversion = 6.0
 addopts = "-ra"
 testpaths = ["tests", "integration"]
 
-
-[tool.poetry]
-name = "f1tenth_gym_jax"
-version = "1.0.0dev"
-description = "Gym environment for F1TENTH"
-license = "MIT"
-authors = [
-    "Hongrui Zheng",
-    "Renukanandan Tumu",
-    "Luigi Berducci",
-    "Ahmad Amine",
-    "Zirui Zang",
-    "Joseph Auckley",
-    "Matthew O'Kelly",
-    "Aman Sinha",
+[dependency-groups]
+dev = [
+    "pytest>=7.4.4,<8",
+    "black>=23.12.1,<24",
+    "ipykernel>=6.29.0,<7",
+    "isort>=5.13.2,<6",
+    "autoflake>=2.2.1,<3",
+    "matplotlib>=3.8.2,<4",
+    "flake8>=7.0.0,<8",
 ]
-maintainers = ["Hongrui Zheng"]
-readme = "README.md"
-homepage = "https://f1tenth.org"
-repository = "https://github.com/f1tenth/f1tenth_gym_jax"
-documentation = "https://f1tenth-gym.readthedocs.io/en/latest/"
-packages = [{ include = "f1tenth_gym_jax" }]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-PyYAML = "^6.0.2"
-requests = "^2.32.4"
-jax = {extras = ["cuda12"], version = "^0.6.2"}
-jax-pf = {git = "https://github.com/hzheng40/jax_pf.git"}
-flax = "^0.10.6"
-chex = "^0.1.89"
-pyqtgraph = "^0.13.7"
-pyqt6 = "^6.9.1"
-pyopengl = "^3.1.9"
-pillow = "^11.2.1"
+[tool.uv]
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^7.4.4"
-black = "^23.12.1"
-ipykernel = "^6.29.0"
-isort = "^5.13.2"
-autoflake = "^2.2.1"
-matplotlib = "^3.8.2"
-flake8 = "^7.0.0"
+[tool.uv.sources]
+jax-pf = { git = "https://github.com/hzheng40/jax_pf" }
 
+[tool.hatch.build.targets.sdist]
+include = ["f1tenth_gym_jax"]
+
+[tool.hatch.build.targets.wheel]
+include = ["f1tenth_gym_jax"]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"

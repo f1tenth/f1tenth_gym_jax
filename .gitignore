@@ -1,3 +1,4 @@
+**/wandb/
 build/
 gym/f110_gym.egg-info
 __pycache__

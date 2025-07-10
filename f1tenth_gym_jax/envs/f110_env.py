@@ -145,11 +145,20 @@ class F110Env(MultiAgentEnv):
                 s=0.0, ey=np.sign(start_point_curvature) * 1.5, ephi=0.0
             )
         )[:2]
+        # get racing direction
+        fp = jnp.array([self.track.raceline.xs[0], self.track.raceline.ys[0]])
+        sp = jnp.array([self.track.raceline.xs[1], self.track.raceline.ys[1]])
+        fp_winding_vec = fp - self.winding_point
+        sp_winding_vec = sp - self.winding_point
+        self.winding_direction = jnp.sign(
+            jnp.arctan2(
+                jnp.cross(fp_winding_vec, sp_winding_vec),
+                jnp.dot(fp_winding_vec, sp_winding_vec),
+            )
+        )
 
         # set pixel centers of occupancy map
         self._set_pixelcenters()
-
-        # TODO: keep all start line, lap information in frenet frame
 
         # scan params if produce scan
         # if self.params.produce_scans:
@@ -327,17 +336,18 @@ class F110Env(MultiAgentEnv):
         winding_vector = state.cartesian_states[:, [0, 1]] - self.winding_point
 
         # angle differentials, from new winding vectors to previous winding vectors
+        # corrected by racing direction
         winding_angles = jnp.arctan2(
-            jnp.cross(winding_vector, state.prev_winding_vector),
-            jnp.einsum("ij,ij->i", winding_vector, state.prev_winding_vector),
-        )
+            jnp.cross(state.prev_winding_vector, winding_vector),
+            jnp.einsum("ij,ij->i", state.prev_winding_vector, winding_vector),
+        ) * self.winding_direction
 
         state = state.replace(
             last_accumulated_angles=state.accumulated_angles,
             accumulated_angles=state.accumulated_angles + winding_angles,
         )
         state = state.replace(
-            num_laps=(jnp.abs(state.accumulated_angles) / (2 * jnp.pi)).astype(int)
+            num_laps=(state.accumulated_angles / (2 * jnp.pi)).astype(int)
         )
         laps_done = state.num_laps >= self.params.max_num_laps
 
@@ -365,16 +375,13 @@ class F110Env(MultiAgentEnv):
             return 0.0
 
         def progress_reward(i):
-            # higher reward for making more progress along the track
-            prog = jnp.fmod(
-                (state.accumulated_angles[i] - state.last_accumulated_angles[i]),
-                (2 * jnp.pi),
-            )
+            # higher reward for making more progress along the track, penalty for going backwards
+            prog = state.accumulated_angles[i] - state.last_accumulated_angles[i]
             return prog
 
         def alive_reward(i):
-            # reward for being alive, penalize collisions
-            return jax.lax.select(state.collisions[i], -1.0, 0.05)
+            # penalize collisions
+            return jax.lax.select(state.collisions[i], -1.0, 0.0)
 
         def reward(i):
             tr = jax.lax.select("time" in self.params.reward_type, time_reward(i), 0.0)

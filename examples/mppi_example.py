@@ -306,6 +306,16 @@ def main():
 
     final_runner, all_runner_state = jax.lax.scan(_env_step, _env_init(), length=1000)
 
+    accum_angles = all_runner_state[0].accumulated_angles
+    print(accum_angles.shape)
+    for i in range(num_envs):
+        plt.plot(accum_angles[:, i, 0], label=f"env {i}, agent 0")
+        plt.plot(accum_angles[:, i, 1], label=f"env {i}, agent 1")
+        plt.plot(accum_angles[:, i, 2], label=f"env {i}, agent 2")
+
+    plt.legend()
+    plt.show()
+
     all_a = all_runner_state[2]
     all_samples = all_runner_state[3]
     all_opt_a = all_runner_state[4]

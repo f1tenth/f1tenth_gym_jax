@@ -33,7 +33,7 @@ class TrainConfig(NamedTuple):
     action_dim: int = 2
     env_name: str = f"Spielberg_{num_agents}_scan_collision_progress+alive_v0"
     num_envs: int = 1024
-    num_steps: int = 100
+    num_steps: int = 2048
     total_timesteps: int = int(1.0e8)
     num_minibatches: int = 64
     num_actors: int = num_agents * num_envs
@@ -45,8 +45,8 @@ class TrainConfig(NamedTuple):
     activation: str = "tanh"
 
     # train params
-    update_epochs: int = 4
-    lr: float = 1.0e-4
+    update_epochs: int = 10
+    lr: float = 3.0e-4
     anneal_lr: bool = True
     max_grad_norm: float = 0.5
 
@@ -55,7 +55,7 @@ class TrainConfig(NamedTuple):
     gae_lambda: float = 0.95
     clip_eps: float = 0.2
     scale_clip_eps: bool = False
-    ent_coef: float = 0.001
+    ent_coef: float = 0.0
     vf_coef: float = 0.5
 
     # logging

@@ -105,7 +105,7 @@ class F110Env(MultiAgentEnv):
         if params.produce_scans:
             self.scan_size = params.num_beams
         else:
-            self.scan_size = 0
+            self.scan_size = 0 # TODO: this needs to be addressed
 
         # observing others
         if params.observe_others:
@@ -194,7 +194,7 @@ class F110Env(MultiAgentEnv):
         # make x_and_u
         x = state.cartesian_states
         us = jnp.array([actions[i] for i in self.agents])
-        # TODO: need to stop collided agents and set input to 0
+        # stop collided cars
         us = jnp.where(state.collisions[:, None], jnp.zeros_like(us), us)
         x_and_u = jnp.hstack((x, us))
         # integrate dynamics, vmapped
@@ -205,6 +205,9 @@ class F110Env(MultiAgentEnv):
         state = jax.lax.cond(
             self.params.produce_scans, self._scan, self._ret_orig_state, state, key
         )
+
+        # update step
+        state = state.replace(step=state.step + 1)
 
         # 2. collisions
         state = jax.lax.cond(self.params.collision_on, self._collisions, self._ret_orig_state, state)
@@ -229,7 +232,7 @@ class F110Env(MultiAgentEnv):
         """Performs resetting of the environment."""
 
         # reset states
-        s_key, ey_key = jax.random.split(key)
+        s_key, ey_key, vel_key = jax.random.split(key, 3)
         # randomly choose first agent location [0, 1] on entire arc length
         first_agent_s_loc = jax.random.uniform(s_key)
         first_agent_s = first_agent_s_loc * self.track.length
@@ -334,9 +337,12 @@ class F110Env(MultiAgentEnv):
         )
         laps_done = state.num_laps >= self.params.max_num_laps
 
+        # num steps done
+        steps_done = state.step >= self.params.max_steps
+
         # collision dones
         done_dict = {
-            a: jnp.logical_or(state.collisions[i], laps_done[i])
+            a: jnp.logical_or(jnp.logical_or(state.collisions[i], laps_done[i]), steps_done)
             for i, a in enumerate(self.agents)
         }
 
@@ -348,8 +354,24 @@ class F110Env(MultiAgentEnv):
 
     @partial(jax.jit, static_argnums=[0])
     def get_reward(self, state: State) -> Dict[str, float]:
-        def reward(i):
+        def time_reward(i):
+            # TODO
             return 0.0
+        
+        def progress_reward(i):
+            # higher reward for making more progress along the track
+            prog = state.num_laps[i] + state.accumulated_angles[i] / (2 * jnp.pi)
+            return prog
+
+        def alive_reward(i):
+            # reward for being alive, penalize collisions
+            return jax.lax.select(state.collisions[i], -1.0, 0.05)
+    
+        def reward(i):
+            tr = jax.lax.select("time" in self.params.reward_type, time_reward(i), 0.0)
+            pr = jax.lax.select("progress" in self.params.reward_type, progress_reward(i), 0.0)
+            ar = jax.lax.select("alive" in self.params.reward_type, alive_reward(i), 0.0)
+            return tr + pr + ar
 
         return {a: reward(i) for i, a in enumerate(self.agents)}
 

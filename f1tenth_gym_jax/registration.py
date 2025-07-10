@@ -21,11 +21,12 @@ def _parse_scenario(scenario: str):
     produce_scan = scenario[2 + index_bump] == "scan"
     collision_on = scenario[3 + index_bump] == "collision"
     reward_type = scenario[4 + index_bump]
-    all_reward_function = reward_type.split("+")
-    assert reward_type in [
+    all_reward_function = set(reward_type.split("+"))
+    assert all(r in [
         "time",
-        "",
-    ], f"Invalid reward type: {reward_type}, must be one of ['time', '']"
+        "progress",
+        "alive"
+    ] for r in all_reward_function), f"Invalid reward type list: {all_reward_function}, must be from ['time', 'progress', 'alive']"
     return map_name, num_agents, produce_scan, collision_on, reward_type
 
 

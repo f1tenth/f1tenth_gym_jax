@@ -34,6 +34,7 @@ class State:
 
     # winding vector
     prev_winding_vector: chex.Array  # [n_agent, 2]
+    last_accumulated_angles: chex.Array  # [n_agent, 1]
     accumulated_angles: chex.Array  # [n_agent, 1]
 
 

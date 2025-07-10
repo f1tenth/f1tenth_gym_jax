@@ -105,7 +105,7 @@ class F110Env(MultiAgentEnv):
         if params.produce_scans:
             self.scan_size = params.num_beams
         else:
-            self.scan_size = 0 # TODO: this needs to be addressed
+            self.scan_size = 0  # TODO: this needs to be addressed
 
         # observing others
         if params.observe_others:
@@ -210,7 +210,9 @@ class F110Env(MultiAgentEnv):
         state = state.replace(step=state.step + 1)
 
         # 2. collisions
-        state = jax.lax.cond(self.params.collision_on, self._collisions, self._ret_orig_state, state)
+        state = jax.lax.cond(
+            self.params.collision_on, self._collisions, self._ret_orig_state, state
+        )
 
         # 2. get obs
         obs = self.get_obs(state)
@@ -232,7 +234,7 @@ class F110Env(MultiAgentEnv):
         """Performs resetting of the environment."""
 
         # reset states
-        s_key, ey_key, vel_key = jax.random.split(key, 3)
+        s_key, ey_key = jax.random.split(key)
         # randomly choose first agent location [0, 1] on entire arc length
         first_agent_s_loc = jax.random.uniform(s_key)
         first_agent_s = first_agent_s_loc * self.track.length
@@ -265,6 +267,7 @@ class F110Env(MultiAgentEnv):
             scans=jnp.zeros((self.num_agents, self.num_beams)),
             prev_winding_vector=jnp.zeros((self.num_agents, 2)),
             accumulated_angles=jnp.zeros((self.num_agents,)),
+            last_accumulated_angles=jnp.zeros((self.num_agents,)),
         )
 
         # scan if needed
@@ -309,7 +312,7 @@ class F110Env(MultiAgentEnv):
                     relative_poses[:, 2],
                 )
             ).flatten()
-            
+
             if self.params.produce_scans:
                 all_states = jnp.hstack((agent_state, relative_states, agent_scan))
             else:
@@ -330,7 +333,8 @@ class F110Env(MultiAgentEnv):
         )
 
         state = state.replace(
-            accumulated_angles=state.accumulated_angles + winding_angles
+            last_accumulated_angles=state.accumulated_angles,
+            accumulated_angles=state.accumulated_angles + winding_angles,
         )
         state = state.replace(
             num_laps=(jnp.abs(state.accumulated_angles) / (2 * jnp.pi)).astype(int)
@@ -342,7 +346,9 @@ class F110Env(MultiAgentEnv):
 
         # collision dones
         done_dict = {
-            a: jnp.logical_or(jnp.logical_or(state.collisions[i], laps_done[i]), steps_done)
+            a: jnp.logical_or(
+                jnp.logical_or(state.collisions[i], laps_done[i]), steps_done
+            )
             for i, a in enumerate(self.agents)
         }
 
@@ -357,26 +363,33 @@ class F110Env(MultiAgentEnv):
         def time_reward(i):
             # TODO
             return 0.0
-        
+
         def progress_reward(i):
             # higher reward for making more progress along the track
-            prog = state.num_laps[i] + state.accumulated_angles[i] / (2 * jnp.pi)
+            prog = jnp.fmod(
+                (state.accumulated_angles[i] - state.last_accumulated_angles[i]),
+                (2 * jnp.pi),
+            )
             return prog
 
         def alive_reward(i):
             # reward for being alive, penalize collisions
             return jax.lax.select(state.collisions[i], -1.0, 0.05)
-    
+
         def reward(i):
             tr = jax.lax.select("time" in self.params.reward_type, time_reward(i), 0.0)
-            pr = jax.lax.select("progress" in self.params.reward_type, progress_reward(i), 0.0)
-            ar = jax.lax.select("alive" in self.params.reward_type, alive_reward(i), 0.0)
+            pr = jax.lax.select(
+                "progress" in self.params.reward_type, progress_reward(i), 0.0
+            )
+            ar = jax.lax.select(
+                "alive" in self.params.reward_type, alive_reward(i), 0.0
+            )
             return tr + pr + ar
 
         return {a: reward(i) for i, a in enumerate(self.agents)}
 
     @partial(jax.jit, static_argnums=[0])
-    def _ret_orig_state(self, state: State, key: chex.PRNGKey=None) -> State:
+    def _ret_orig_state(self, state: State, key: chex.PRNGKey = None) -> State:
         new_state = state.replace(scans=jnp.zeros((self.num_agents, self.num_beams)))
         return new_state
 

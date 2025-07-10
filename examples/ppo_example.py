@@ -33,7 +33,7 @@ class TrainConfig(NamedTuple):
     action_dim: int = 2
     env_name: str = f"Spielberg_{num_agents}_scan_collision_progress+alive_v0"
     num_envs: int = 1024
-    num_steps: int = 1000
+    num_steps: int = 100
     total_timesteps: int = int(1.0e8)
     num_minibatches: int = 64
     num_actors: int = num_agents * num_envs

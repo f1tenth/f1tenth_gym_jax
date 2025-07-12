@@ -1,4 +1,5 @@
 import os
+
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".99"
 
@@ -27,7 +28,7 @@ class MPPIConfig:
     # mppi
     n_iterations: int = 1
     n_steps: int = 20
-    n_samples: int = 128
+    n_samples: int = 100
     temperature: float = 0.01
     damping: float = 0.001
     dt: float = 0.05
@@ -208,12 +209,12 @@ class MPPI:
 
 
 def main():
-    num_agents = 3
-    num_envs = 10
+    num_agents = 2
+    num_envs = 2
     num_actors = num_agents * num_envs
     num_states = 7
 
-    env = make(f"Spielberg_{num_agents}_noscan_collision_time_v0")
+    env = make(f"Spielberg_{num_agents}_noscan_nocollision_progress_v0")
 
     rng = jax.random.key(0)
     rng2 = jax.random.key(1)
@@ -287,7 +288,7 @@ def main():
         # Unbatch the actions to match the environment's expected input
         env_actions = unbatchify(current_action, env.agents, num_envs, num_agents)
 
-        obsv, env_state, _, _, info = jax.vmap(env.step)(
+        obsv, env_state, reward, done, info = jax.vmap(env.step)(
             step_rngs, env_state, env_actions
         )
         runner_state = (
@@ -302,18 +303,37 @@ def main():
             batched_rng,
             rng,
         )
-        return runner_state, runner_state
+        results = (
+            runner_state,
+            batchify(reward, env.agents, num_actors),
+            batchify(done, env.agents, num_actors),
+        )
+        return runner_state, results
 
-    final_runner, all_runner_state = jax.lax.scan(_env_step, _env_init(), length=1000)
+    final_runner, (all_runner_state, all_reward, all_done) = jax.lax.scan(
+        _env_step, _env_init(), length=7000
+    )
+
+    fig, ax = plt.subplots(3, 1, sharex=True, figsize=(10, 10))
 
     accum_angles = all_runner_state[0].accumulated_angles
-    print(accum_angles.shape)
     for i in range(num_envs):
-        plt.plot(accum_angles[:, i, 0], label=f"env {i}, agent 0")
-        plt.plot(accum_angles[:, i, 1], label=f"env {i}, agent 1")
-        plt.plot(accum_angles[:, i, 2], label=f"env {i}, agent 2")
+        ax[0].plot(accum_angles[:, i, 0], label=f"env {i}, agent 0")
+        ax[0].plot(accum_angles[:, i, 1], label=f"env {i}, agent 1")
+    ax[0].set_title("Accumulated angles")
+    ax[0].legend()
 
-    plt.legend()
+    for i in range(num_envs):
+        ax[1].plot(all_reward[:, i, 0], label=f"env {i}, agent 0")
+        ax[1].plot(all_reward[:, i, 1], label=f"env {i}, agent 1")
+    ax[1].set_title("Reward per step")
+    ax[1].legend()
+
+    for i in range(num_envs):
+        ax[2].plot(all_done[:, i, 0], label=f"env {i}, agent 0")
+        ax[2].plot(all_done[:, i, 1], label=f"env {i}, agent 1")
+    ax[2].set_title("Done per step")
+    ax[2].legend()
     plt.show()
 
     all_a = all_runner_state[2]
@@ -334,13 +354,27 @@ def main():
 
     zoom = 15
     for i in range(config.n_samples):
-        plt.plot(sample[i, :, 0], sample[i, :, 1], "o-", markersize=3, alpha=0.1, color="gray")
+        plt.plot(
+            sample[i, :, 0],
+            sample[i, :, 1],
+            "o-",
+            markersize=3,
+            alpha=0.1,
+            color="gray",
+        )
         plt.scatter(
-            sample[i, :, 0], sample[i, :, 1], s=10, color="blue", marker="o", alpha=cost_sample[i, :]
+            sample[i, :, 0],
+            sample[i, :, 1],
+            s=10,
+            color="blue",
+            marker="o",
+            alpha=cost_sample[i, :],
         )
     plt.plot(opt_sample[:, 0], opt_sample[:, 1], "x-", markersize=3, color="red")
     plt.plot(ref_sample[:, 0], ref_sample[:, 1], "o", markersize=5, color="green")
-    plt.plot(mppi.waypoints[:, 1], mppi.waypoints[:, 2], "k-", markersize=3, linewidth=1)
+    plt.plot(
+        mppi.waypoints[:, 1], mppi.waypoints[:, 2], "k-", markersize=3, linewidth=1
+    )
     plt.axis("equal")
     plt.xlim(sample[0, 0, 0] + zoom, sample[0, 0, 0] - zoom)
     plt.ylim(sample[0, 0, 1] + zoom, sample[0, 0, 1] - zoom)
@@ -352,38 +386,68 @@ def main():
     ax[1].plot(opt_a_sample[:, 1], label="longitudinal acceleration")
     ax[1].legend()
     ax[2].plot(opt_sample[:, 0], label="x position")
-    ax[2].plot(ref_sample[:, 0], label="reference x", linestyle='--')
+    ax[2].plot(ref_sample[:, 0], label="reference x", linestyle="--")
     ax[2].legend()
     ax[3].plot(opt_sample[:, 1], label="y position")
-    ax[3].plot(ref_sample[:, 1], label="reference y", linestyle='--')
+    ax[3].plot(ref_sample[:, 1], label="reference y", linestyle="--")
     ax[3].legend()
     ax[4].plot(opt_sample[:, 3], label="speed")
-    ax[4].plot(ref_sample[:, 2], label="reference speed", linestyle='--')
+    ax[4].plot(ref_sample[:, 2], label="reference speed", linestyle="--")
     ax[4].legend()
     ax[5].plot(opt_sample[:, 4], label="yaw")
-    ax[5].plot(ref_sample[:, 3], label="reference yaw", linestyle='--')
+    ax[5].plot(ref_sample[:, 3], label="reference yaw", linestyle="--")
     ax[5].legend()
     ax[6].plot(opt_sample[:, 2], label="steering angle")
     ax[6].legend()
 
     for i in range(config.n_samples):
         ax[0].scatter(
-            jnp.arange(config.n_steps), a_sample[i, :, 0], s=10, color="blue", marker="o", alpha=cost_sample[i, :]
+            jnp.arange(config.n_steps),
+            a_sample[i, :, 0],
+            s=10,
+            color="blue",
+            marker="o",
+            alpha=cost_sample[i, :],
         )
         ax[1].scatter(
-            jnp.arange(config.n_steps), a_sample[i, :, 1], s=10, color="blue", marker="o", alpha=cost_sample[i, :]
+            jnp.arange(config.n_steps),
+            a_sample[i, :, 1],
+            s=10,
+            color="blue",
+            marker="o",
+            alpha=cost_sample[i, :],
         )
         ax[2].scatter(
-            jnp.arange(config.n_steps), sample[i, :, 0], s=10, color="blue", marker="o", alpha=cost_sample[i, :]
+            jnp.arange(config.n_steps),
+            sample[i, :, 0],
+            s=10,
+            color="blue",
+            marker="o",
+            alpha=cost_sample[i, :],
         )
         ax[3].scatter(
-            jnp.arange(config.n_steps), sample[i, :, 1], s=10, color="blue", marker="o", alpha=cost_sample[i, :]
+            jnp.arange(config.n_steps),
+            sample[i, :, 1],
+            s=10,
+            color="blue",
+            marker="o",
+            alpha=cost_sample[i, :],
         )
         ax[4].scatter(
-            jnp.arange(config.n_steps), sample[i, :, 3], s=10, color="blue", marker="o", alpha=cost_sample[i, :]
+            jnp.arange(config.n_steps),
+            sample[i, :, 3],
+            s=10,
+            color="blue",
+            marker="o",
+            alpha=cost_sample[i, :],
         )
         ax[5].scatter(
-            jnp.arange(config.n_steps), sample[i, :, 4], s=10, color="blue", marker="o", alpha=cost_sample[i, :]
+            jnp.arange(config.n_steps),
+            sample[i, :, 4],
+            s=10,
+            color="blue",
+            marker="o",
+            alpha=cost_sample[i, :],
         )
     plt.show()
 

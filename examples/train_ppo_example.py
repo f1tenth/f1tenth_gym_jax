@@ -31,9 +31,9 @@ class TrainConfig(NamedTuple):
     # {map_name}_{num_agents}_{scan/noscan}_{reward_type}_v0
     num_agents: int = 1
     action_dim: int = 2
-    env_name: str = f"Spielberg_{num_agents}_scan_collision_progress+alive_v0"
+    env_name: str = f"Spielberg_{num_agents}_scan_collision_progress+alive_velocity+steeringangle_v0"
     num_envs: int = 1024
-    num_steps: int = 2048
+    num_steps: int = 500
     total_timesteps: int = int(1.0e8)
     num_minibatches: int = 64
     num_actors: int = num_agents * num_envs
@@ -55,7 +55,7 @@ class TrainConfig(NamedTuple):
     gae_lambda: float = 0.95
     clip_eps: float = 0.2
     scale_clip_eps: bool = False
-    ent_coef: float = 0.0
+    ent_coef: float = 0.001
     vf_coef: float = 0.5
 
     # logging

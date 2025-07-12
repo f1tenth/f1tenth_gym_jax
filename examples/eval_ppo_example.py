@@ -53,10 +53,27 @@ def main():
         )
 
         runner_state = (env_state, obsv, rng)
-        results_out = (env_state, obsv, reward, done, info)
+        results_out = (env_state, obsv, batchify(reward, env.agents, num_actors), batchify(done, env.agents, num_actors), info)
         return runner_state, results_out
 
     final_runner, results_traj = jax.lax.scan(_env_step, _init_env(), length=num_steps)
+
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(2, 1, sharex=True, figsize=(10, 10))
+    for i in range(num_envs):
+        ax[0].plot(results_traj[2][:, i, 0], label=f"env {i}, agent 0")
+    ax[0].legend()
+    ax[0].set_title("Reward per step")
+    ax[0].set_xlabel("Step")
+    ax[0].set_ylabel("Reward")
+
+    for i in range(num_envs):
+        ax[1].plot(results_traj[3][:, i, 0], label=f"env {i}, agent 0")
+    ax[1].legend()
+    ax[1].set_title("Done per step")
+    ax[1].set_xlabel("Step")
+    ax[1].set_ylabel("Done")
+    plt.show()
 
     player = TrajRenderer(env)
     player.render(np.array(results_traj[0].cartesian_states))

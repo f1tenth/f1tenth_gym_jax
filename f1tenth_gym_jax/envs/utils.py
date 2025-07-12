@@ -23,7 +23,9 @@ class State:
     cartesian_states: (
         chex.Array
     )  # [n_agent, [x, y, delta, v, psi, (psi_dot, beta)]], extra states for st in ()
+    last_cartesian_states: chex.Array
     frenet_states: chex.Array  # [n_agent, [s, ey, epsi]]
+    last_frenet_states: chex.Array
     collisions: chex.Array  # [n_agent,]
 
     # race stuff
@@ -74,9 +76,9 @@ class Param:
     width: float = 0.31  # width of the vehicle in meters
     length: float = 0.58  # length of the vehicle in meters
     timestep: float = 0.01  # physical time steps of the dynamics model
-    longitudinal_action_type: str = "acceleration"  # speed or acceleration
+    longitudinal_action_type: str = "acceleration"  # ["acceleration", "speed"]
     steering_action_type: str = (
-        "steering_velocity"  # steering_angle or steering_velocity
+        "steeringvelocity"  # ["steeringangle", "steeringvelocity"]
     )
     integrator: str = "rk4"  # dynamics integrator
     model: str = "st"  # dynamics model type

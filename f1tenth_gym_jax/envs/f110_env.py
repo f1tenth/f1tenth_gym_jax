@@ -137,6 +137,7 @@ class F110Env(MultiAgentEnv):
 
         # load map
         self.track = Track.from_track_name(params.map_name)
+        self.track_length = jnp.max(self.track.centerline.s)
 
         # get a interior point of track as winding number looking point
         start_point_curvature = self.track.centerline.calc_curvature(0.0)
@@ -210,7 +211,14 @@ class F110Env(MultiAgentEnv):
         integrator = jax.vmap(self.integrator_func, in_axes=[None, 0, None])
         new_x_and_u = integrator(self.model_func, x_and_u, self.params)
         final_x_and_u = jnp.where(state.collisions[:, None], x_and_u, new_x_and_u)
-        state = state.replace(cartesian_states=final_x_and_u[:, :-2])
+        state = state.replace(
+            last_cartesian_states=state.cartesian_states,
+            cartesian_states=final_x_and_u[:, :-2],
+            last_frenet_states=state.frenet_states,
+            frenet_states=self.track.vmap_cartesian_to_frenet_jax(
+                final_x_and_u[:, [0, 1, 4]]
+            ),
+        )
         state = jax.lax.cond(
             self.params.produce_scans, self._scan, self._ret_orig_state, state, key
         )
@@ -270,7 +278,9 @@ class F110Env(MultiAgentEnv):
             done=jnp.full((self.num_agents), False),
             step=0,
             cartesian_states=initial_states,
+            last_cartesian_states=initial_states,
             frenet_states=initial_states_frenet,
+            last_frenet_states=initial_states_frenet,
             num_laps=jnp.full((self.num_agents), 0),
             collisions=jnp.zeros((self.num_agents,), dtype=bool),
             scans=jnp.zeros((self.num_agents, self.num_beams)),
@@ -300,7 +310,11 @@ class F110Env(MultiAgentEnv):
             agent_scan = state.scans[agent_ind, :]
 
             # extract states
-            agent_state = state.cartesian_states[agent_ind, :]
+            cart_state = state.cartesian_states[
+                agent_ind, [2, 3, 5, 6]
+            ]  # [x, y, delta, v, psi, psi_dot, beta]
+            fre_state = state.frenet_states[agent_ind, :]  # [s, ey, epsi]
+            agent_state = jnp.concatenate((fre_state, cart_state))
 
             # extract relative states
             # (relative_x, relative_y, longitudinal_v, relative_psi)
@@ -337,10 +351,13 @@ class F110Env(MultiAgentEnv):
 
         # angle differentials, from new winding vectors to previous winding vectors
         # corrected by racing direction
-        winding_angles = jnp.arctan2(
-            jnp.cross(state.prev_winding_vector, winding_vector),
-            jnp.einsum("ij,ij->i", state.prev_winding_vector, winding_vector),
-        ) * self.winding_direction
+        winding_angles = (
+            jnp.arctan2(
+                jnp.cross(state.prev_winding_vector, winding_vector),
+                jnp.einsum("ij,ij->i", state.prev_winding_vector, winding_vector),
+            )
+            * self.winding_direction
+        )
 
         state = state.replace(
             last_accumulated_angles=state.accumulated_angles,
@@ -376,7 +393,18 @@ class F110Env(MultiAgentEnv):
 
         def progress_reward(i):
             # higher reward for making more progress along the track, penalty for going backwards
-            prog = state.accumulated_angles[i] - state.last_accumulated_angles[i]
+            prev = state.last_frenet_states[i, 0]
+            curr = state.frenet_states[i, 0]
+            tl = self.track_length
+
+            prev = jnp.mod(prev, tl)
+            curr = jnp.mod(curr, tl)
+            diff = curr - prev
+            prog = jax.lax.select(
+                diff > 0.95 * tl,
+                diff - tl,
+                jax.lax.select(diff < -0.95 * tl, diff + tl, diff),
+            )
             return prog
 
         def alive_reward(i):

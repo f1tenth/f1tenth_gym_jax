@@ -172,12 +172,23 @@ def vehicle_dynamics_ks(x_and_u: chex.Array, params: Param) -> chex.Array:
     # wheelbase
     lwb = params.lf + params.lr
 
-    # constrained controls
+    # control type
+    if params.steering_action_type == "steeringvelocity":
+        STEER_VEL = x_and_u[5]
+    elif params.steering_action_type == "steeringangle":
+        STEER_VEL = (x_and_u[5] - DELTA) / params.timestep
+
+    if params.longitudinal_action_type == "acceleration":
+        ACCL = x_and_u[6]
+    elif params.longitudinal_action_type == "velocity":
+        ACCL = (x_and_u[6] - V) / params.timestep
+
+    # Controls w/ constraints
     STEER_VEL = steering_constraint(
-        DELTA, x_and_u[5], params.s_min, params.s_max, params.sv_min, params.sv_max
+        DELTA, STEER_VEL, params.s_min, params.s_max, params.sv_min, params.sv_max
     )
     ACCL = accl_constraints(
-        V, x_and_u[6], params.v_switch, params.a_max, params.v_min, params.v_max
+        V, ACCL, params.v_switch, params.a_max, params.v_min, params.v_max
     )
 
     # system dynamics
@@ -193,6 +204,7 @@ def vehicle_dynamics_ks(x_and_u: chex.Array, params: Param) -> chex.Array:
         ]
     )
     return f
+
 
 @partial(jax.jit, static_argnums=[1])
 def vehicle_dynamics_st_switching(x_and_u: chex.Array, params: Param) -> chex.Array:
@@ -244,12 +256,23 @@ def vehicle_dynamics_st_switching(x_and_u: chex.Array, params: Param) -> chex.Ar
     # gravity constant m/s^2
     g = 9.81
 
+    # control type
+    if params.steering_action_type == "steeringvelocity":
+        STEER_VEL = x_and_u[7]
+    elif params.steering_action_type == "steeringangle":
+        STEER_VEL = (x_and_u[7] - DELTA) / params.timestep
+
+    if params.longitudinal_action_type == "acceleration":
+        ACCL = x_and_u[8]
+    elif params.longitudinal_action_type == "velocity":
+        ACCL = (x_and_u[8] - V) / params.timestep
+
     # Controls w/ constraints
     STEER_VEL = steering_constraint(
-        DELTA, x_and_u[7], params.s_min, params.s_max, params.sv_min, params.sv_max
+        DELTA, STEER_VEL, params.s_min, params.s_max, params.sv_min, params.sv_max
     )
     ACCL = accl_constraints(
-        V, x_and_u[8], params.v_switch, params.a_max, params.v_min, params.v_max
+        V, ACCL, params.v_switch, params.a_max, params.v_min, params.v_max
     )
 
     # switch to kinematic model for small velocities
@@ -327,7 +350,7 @@ def vehicle_dynamics_st_switching(x_and_u: chex.Array, params: Param) -> chex.Ar
             0.0,  # dummy dim
         ]
     )
-    
+
     f_ret = jax.lax.select(jnp.abs(V) < 1.5, f_ks, f)
 
     return f_ret
@@ -383,12 +406,23 @@ def vehicle_dynamics_st_smooth(x_and_u: chex.Array, params: Param) -> chex.Array
     # gravity constant m/s^2
     g = 9.81
 
+    # control type
+    if params.steering_action_type == "steeringvelocity":
+        STEER_VEL = x_and_u[7]
+    elif params.steering_action_type == "steeringangle":
+        STEER_VEL = (x_and_u[7] - DELTA) / params.timestep
+
+    if params.longitudinal_action_type == "acceleration":
+        ACCL = x_and_u[8]
+    elif params.longitudinal_action_type == "velocity":
+        ACCL = (x_and_u[8] - V) / params.timestep
+
     # Controls w/ constraints
     STEER_VEL = steering_constraint(
-        DELTA, x_and_u[7], params.s_min, params.s_max, params.sv_min, params.sv_max
+        DELTA, STEER_VEL, params.s_min, params.s_max, params.sv_min, params.sv_max
     )
     ACCL = accl_constraints(
-        V, x_and_u[8], params.v_switch, params.a_max, params.v_min, params.v_max
+        V, ACCL, params.v_switch, params.a_max, params.v_min, params.v_max
     )
 
     # switch to kinematic model for small velocities

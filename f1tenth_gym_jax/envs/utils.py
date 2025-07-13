@@ -76,6 +76,7 @@ class Param:
     width: float = 0.31  # width of the vehicle in meters
     length: float = 0.58  # length of the vehicle in meters
     timestep: float = 0.01  # physical time steps of the dynamics model
+    timestep_ratio: int = 1  # number of simulation steps per control step
     longitudinal_action_type: str = "acceleration"  # ["acceleration", "speed"]
     steering_action_type: str = (
         "steeringvelocity"  # ["steeringangle", "steeringvelocity"]
@@ -92,7 +93,7 @@ class Param:
     observe_others: bool = True  # whether can observe other agents
     map_name: str = "Spielberg"  # map for environment
     max_num_laps: int = 1  # maximum number of laps to run before done
-    max_steps: int = int(120 / timestep)  # maximum number of steps to run before done
+    max_steps: int = int(90 / (timestep * timestep_ratio))  # maximum number of steps to run before done
     reward_type: str = "progress" # reward types
 
 

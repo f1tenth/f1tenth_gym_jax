@@ -75,7 +75,7 @@ def main():
     ax[1].set_ylabel("Done")
     plt.show()
 
-    player = TrajRenderer(env)
+    player = TrajRenderer(env, 1/(env.params.timestep * env.params.timestep_ratio))
     player.render(np.array(results_traj[0].cartesian_states))
 
 

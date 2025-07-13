@@ -27,11 +27,11 @@ from f1tenth_gym_jax.envs.rendering.renderer import TrajRenderer
 class MPPIConfig:
     # mppi
     n_iterations: int = 1
-    n_steps: int = 20
+    n_steps: int = 10
     n_samples: int = 100
     temperature: float = 0.01
     damping: float = 0.001
-    dt: float = 0.05
+    dt: float = 0.1
 
     # system
     control_dim: int = 2  # [steering_velocity, longitudinal_acceleration]
@@ -144,7 +144,7 @@ class MPPI:
             new_x_and_u = self.config.int_fn(
                 self.config.dyn_fn,
                 x_and_u,
-                self.env.params.replace(timestep=self.config.dt),
+                self.env.params.replace(timestep=self.config.dt, timestep_ratio=1),
             )
             next_state = new_x_and_u[: -self.config.control_dim]  # [dim_s]
             return next_state, next_state
@@ -214,7 +214,9 @@ def main():
     num_actors = num_agents * num_envs
     num_states = 7
 
-    env = make(f"Spielberg_{num_agents}_noscan_nocollision_progress_v0")
+    env = make(
+        f"Spielberg_{num_agents}_noscan_nocollision_progress_acceleration+steeringvelocity_1_v0"
+    )
 
     rng = jax.random.key(0)
     rng2 = jax.random.key(1)

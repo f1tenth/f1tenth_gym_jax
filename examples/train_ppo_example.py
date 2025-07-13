@@ -31,7 +31,7 @@ class TrainConfig(NamedTuple):
     # {map_name}_{num_agents}_{scan/noscan}_{reward_type}_v0
     num_agents: int = 1
     action_dim: int = 2
-    env_name: str = f"Spielberg_{num_agents}_scan_collision_progress+alive_velocity+steeringangle_v0"
+    env_name: str = f"Spielberg_{num_agents}_scan_collision_progress+alive_velocity+steeringangle_10_v0"
     num_envs: int = 1024
     num_steps: int = 500
     total_timesteps: int = int(1.0e8)
@@ -60,7 +60,7 @@ class TrainConfig(NamedTuple):
 
     # logging
     project: str = "f1tenth_ppo_example"
-    run_name: str = "gaussianactor"
+    run_name: str = "gaussianactor_ratio10"
     tags: List[str] = ["ppo", "gaussian actor"]
 
 

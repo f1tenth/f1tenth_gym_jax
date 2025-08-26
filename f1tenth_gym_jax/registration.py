@@ -3,8 +3,8 @@ from .envs.utils import Param
 
 
 # scenario patterns
-# {map_name}_{num_agent}_{produce_scan}_{collision_on}_{reward_type}_{control_type(optional)}_{tsratio}_v0
-# {str}_{int}_{"scan"/"noscan"}_{"collision"/"nocollision"}_{"time+/progress+/"}_{accleration+steeringvel/}_{int}_v0
+# {map_name}_{num_agent}_{produce_scan}_{collision_on}_{reward_type}_{control_type(optional)}_{tsratio}_{num_steps}_v0
+# {str}_{int}_{"scan"/"noscan"}_{"collision"/"nocollision"}_{"time+/progress+/"}_{accleration+steeringvel/}_{int}_{int}_v0
 def _parse_scenario(scenario: str):
     scenario = scenario.split("_")
     map_name = scenario[0]
@@ -49,6 +49,20 @@ def _parse_scenario(scenario: str):
             raise ValueError(
                 f"Invalid timestep ratio: {timestep_ratio}, must be an integer."
             ) from exc
+        
+    max_steps = scenario[7 + index_bump]
+    if max_steps == "v0":
+        max_steps = None
+    else:
+        try:
+            max_steps = int(max_steps)
+            assert (
+                max_steps > 0
+            ), f"Invalid max steps: {max_steps}, must be a positive integer."
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid max steps: {max_steps}, must be an integer."
+            ) from exc
 
     return (
         map_name,
@@ -58,6 +72,7 @@ def _parse_scenario(scenario: str):
         reward_type,
         control_type,
         timestep_ratio,
+        max_steps,
     )
 
 
@@ -70,11 +85,14 @@ def make(env_id: str, **env_kwargs):
         reward_type,
         control_type,
         timestep_ratio,
+        max_steps,
     ) = _parse_scenario(env_id)
     if map_name not in registered_maps:
         raise ValueError(
             f"{map_name} is not a registered map, choose from {registered_maps}."
         )
+    if max_steps is None:
+        max_steps = int(90 / (0.1 * timestep_ratio))
 
     env = F110Env(
         num_agents=num_agents,
@@ -86,6 +104,7 @@ def make(env_id: str, **env_kwargs):
             longitudinal_action_type=control_type[0],
             steering_action_type=control_type[1],
             timestep_ratio=timestep_ratio,
+            max_steps=max_steps,
             **env_kwargs,
         ),
     )

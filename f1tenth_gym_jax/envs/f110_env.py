@@ -425,8 +425,9 @@ class F110Env(MultiAgentEnv):
 
     @partial(jax.jit, static_argnums=[0])
     def _ret_orig_state(self, state: State, key: chex.PRNGKey = None) -> State:
-        new_state = state.replace(scans=jnp.zeros((self.num_agents, self.num_beams)))
-        return new_state
+        # new_state = state.replace(scans=jnp.zeros((self.num_agents, self.num_beams)))
+        # return new_state
+        return state
 
     @partial(jax.jit, static_argnums=[0])
     def _scan(self, state: State, key: chex.PRNGKey) -> State:

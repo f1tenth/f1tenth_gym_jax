@@ -103,7 +103,7 @@ class Track:
         track_dir = find_track_dir(map_name)
         # load map yaml
         map_metadata = yaml.safe_load(
-            open(str(track_dir / f"{track_dir.stem}_map.yaml"), "r")
+            open(str(track_dir / f"{track_dir.stem}.yaml"), "r")
         )
         resolution = map_metadata["resolution"]
         ox = map_metadata["origin"][0]

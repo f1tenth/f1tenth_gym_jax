@@ -23,6 +23,7 @@ Install optional dependencies for specific workflows:
     uv sync --extra examples  # plotting, video, and track generation examples
     uv sync --extra rl        # PPO training/evaluation dependencies
     uv sync --extra docs      # Sphinx documentation build
+    uv sync --extra cuda      # JAX CUDA 12 support
 
 Using pip
 ---------
@@ -41,10 +42,13 @@ Plain ``pip install -e .`` does not read ``[tool.uv.sources]`` from
 Docker
 ------
 
+The default Docker image installs the standard dependency set and uses
+offscreen Qt rendering, matching the headless CI smoke tests.
+
 .. code:: bash
 
     docker build -t f1tenth_gym_jax -f Dockerfile .
-    docker run --gpus all -it -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix f1tenth_gym_jax
+    docker run -it f1tenth_gym_jax
 
 Map cache
 ---------

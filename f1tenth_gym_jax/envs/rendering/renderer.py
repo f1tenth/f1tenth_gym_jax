@@ -240,14 +240,19 @@ class WebRenderer:
         open_browser: bool = False,
         trajectory_layout: TrajectoryLayout = "step_major",
     ):
-        if render_mode == "rgb_array":
+        if render_mode != "html":
             raise ValueError(
-                "rgb_array rendering was removed. Use the web dashboard output instead."
+                "Only render_mode='html' is supported. Use the web dashboard output "
+                "instead."
             )
         if trajectory_layout not in {"auto", "step_major", "batch_major"}:
             raise ValueError(
                 "trajectory_layout must be 'auto', 'step_major', or 'batch_major'."
             )
+        if render_fps is not None and render_fps <= 0:
+            raise ValueError("render_fps must be positive when provided.")
+        if window_width < 1 or window_height < 1:
+            raise ValueError("window_width and window_height must be positive.")
 
         self.env = env
         self.render_mode = render_mode

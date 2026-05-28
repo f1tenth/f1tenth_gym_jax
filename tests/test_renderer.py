@@ -109,11 +109,27 @@ class TestRenderer(unittest.TestCase):
             self.assertEqual(payload["summary"]["rollouts"], 1)
             self.assertEqual(payload["summary"]["steps"], 2)
 
-    def test_rgb_array_mode_is_removed(self):
+    def test_desktop_render_modes_are_removed(self):
         env, _ = self._make_renderer_inputs()
 
-        with self.assertRaisesRegex(ValueError, "rgb_array rendering was removed"):
-            WebRenderer(env, render_mode="rgb_array")
+        for render_mode in ("human", "rgb_array"):
+            with self.subTest(render_mode=render_mode):
+                with self.assertRaisesRegex(ValueError, "render_mode='html'"):
+                    WebRenderer(env, render_mode=render_mode)
+
+    def test_renderer_rejects_invalid_playback_parameters(self):
+        env, _ = self._make_renderer_inputs()
+
+        invalid_kwargs = [
+            {"render_fps": 0},
+            {"render_fps": -1},
+            {"window_width": 0},
+            {"window_height": 0},
+        ]
+        for kwargs in invalid_kwargs:
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(ValueError):
+                    WebRenderer(env, **kwargs)
 
     def test_play_pause_tracks_default_playback_state(self):
         env, trajectory = self._make_renderer_inputs()

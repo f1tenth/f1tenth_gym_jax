@@ -131,3 +131,15 @@ class TestF110Env(unittest.TestCase):
 
         action = action_space.sample(jax.random.key(1))
         self.assertTrue(bool(action_space.contains(action)))
+
+    def test_time_reward_penalizes_elapsed_control_time(self):
+        env = make(
+            "Spielberg_1_noscan_nocollision_time_acceleration+steeringvelocity_1_5_v0"
+        )
+        _, state = env.reset(jax.random.key(0))
+        actions = {"agent_0": jnp.zeros((2,))}
+
+        _, _, rewards, _, _ = env.step(jax.random.key(1), state, actions)
+
+        expected_reward = -env.params.timestep * env.params.timestep_ratio
+        self.assertAlmostEqual(float(rewards["agent_0"]), expected_reward)

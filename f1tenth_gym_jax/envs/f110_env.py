@@ -1,5 +1,5 @@
 """
-Jax jittable f1tenth_gym environment
+JAX-jittable f1tenth_gym_jax environment
 
 Based on JaxMARL api which follows PettingZoo/Gymnax
 
@@ -52,10 +52,8 @@ class F110Env(MultiAgentEnv):
     JAX compatible gym environment for F1TENTH
 
     Args:
-        kwargs:
-            num_agents (int, default=2): number of agents in the environment
-            map (str, default='vegas'): name of the map used for the environment.
-            params (Parm): vehicle parameters.
+        num_agents (int, default=1): number of agents in the environment.
+        params (Param): vehicle, map, reward, and simulation parameters.
 
     """
 
@@ -128,7 +126,7 @@ class F110Env(MultiAgentEnv):
         if params.produce_scans:
             self.scan_size = params.num_beams
         else:
-            self.scan_size = 0  # TODO: this needs to be addressed
+            self.scan_size = 0
 
         # observing others
         if params.observe_others:
@@ -411,8 +409,7 @@ class F110Env(MultiAgentEnv):
     @partial(jax.jit, static_argnums=[0])
     def get_reward(self, state: State) -> Dict[str, float]:
         def time_reward(i):
-            # TODO
-            return 0.0
+            return -self.params.timestep * self.params.timestep_ratio
 
         def progress_reward(i):
             # higher reward for making more progress along the track, penalty for going backwards
@@ -448,8 +445,6 @@ class F110Env(MultiAgentEnv):
 
     @partial(jax.jit, static_argnums=[0])
     def _ret_orig_state(self, state: State, key: chex.PRNGKey = None) -> State:
-        # new_state = state.replace(scans=jnp.zeros((self.num_agents, self.num_beams)))
-        # return new_state
         return state
 
     @partial(jax.jit, static_argnums=[0])

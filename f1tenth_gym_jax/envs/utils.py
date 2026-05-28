@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Dict, Tuple, Union
+from typing import Dict, Mapping, Sequence, Tuple
 
 import chex
 import jax
@@ -44,10 +44,10 @@ class State:
 @struct.dataclass
 class LogEnvState:
     env_state: State
-    episode_returns: float
-    episode_lengths: int
-    returned_episode_returns: float
-    returned_episode_lengths: int
+    episode_returns: chex.Array
+    episode_lengths: chex.Array
+    returned_episode_returns: chex.Array
+    returned_episode_lengths: chex.Array
 
 
 @struct.dataclass
@@ -98,13 +98,17 @@ class Param:
     reward_type: str = "progress"  # reward types
 
 
-def batchify(x: dict, agent_list, num_actors):
+def batchify(
+    x: Mapping[str, chex.Array], agent_list: Sequence[str], num_actors: int
+) -> chex.Array:
     x = jnp.stack([x[a] for a in agent_list])
     return x.reshape((num_actors, -1))
 
 
-def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
-    x = x.reshape((num_actors, num_envs, -1))
+def unbatchify(
+    x: jnp.ndarray, agent_list: Sequence[str], num_envs: int, num_agents: int
+) -> Dict[str, chex.Array]:
+    x = x.reshape((num_agents, num_envs, -1))
     return {a: x[i] for i, a in enumerate(agent_list)}
 
 
@@ -115,7 +119,7 @@ class Wrapper:
     def __getattr__(self, name: str):
         return getattr(self._env, name)
 
-    def _batchify_floats(self, x: dict):
+    def _batchify_floats(self, x: Mapping[str, chex.Array]) -> chex.Array:
         return jnp.stack([x[a] for a in self._env.agents])
 
 
@@ -129,7 +133,7 @@ class LogWrapper(Wrapper):
         self.replace_info = replace_info
 
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
+    def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], LogEnvState]:
         obs, env_state = self._env.reset(key)
         state = LogEnvState(
             env_state,
@@ -145,8 +149,14 @@ class LogWrapper(Wrapper):
         self,
         key: chex.PRNGKey,
         state: LogEnvState,
-        action: Union[int, float],
-    ) -> Tuple[chex.Array, LogEnvState, float, bool, dict]:
+        action: Dict[str, chex.Array],
+    ) -> Tuple[
+        Dict[str, chex.Array],
+        LogEnvState,
+        Dict[str, chex.Array],
+        Dict[str, chex.Array],
+        dict,
+    ]:
         obs, env_state, reward, done, info = self._env.step(
             key, state.env_state, action
         )
@@ -172,7 +182,7 @@ class LogWrapper(Wrapper):
 
 class WorldStateWrapper(Wrapper):
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
+    def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], State]:
         obs, env_state = self._env.reset(key)
         obs["world_state"] = self.world_state(obs)
         return obs, env_state

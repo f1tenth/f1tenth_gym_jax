@@ -158,3 +158,8 @@ jobs:
               spec.loader.exec_module(module)
               print(path)
           PY
+
+      - name: Run lightweight example smoke tests
+        run: |
+          uv run python examples/run_in_empty_track.py --steps 2 --no-render
+          uv run python examples/waypoint_follow.py --num-agents 1 --num-envs 1 --steps 2 --no-render

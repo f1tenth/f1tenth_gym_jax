@@ -2,6 +2,7 @@ import os
 
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
+import argparse
 
 import jax
 import jax.numpy as jnp
@@ -36,9 +37,12 @@ def pure_pursuit_2(pose, wpts, Ld=3.0, L=0.33, dt=0.1):
     return jnp.array([sv, accl])
 
 
-def main():
-    num_agents = 3
-    num_envs = 10
+def run_waypoint_follow(
+    num_agents: int = 3,
+    num_envs: int = 10,
+    num_steps: int = 1000,
+    render: bool = True,
+):
     num_actors = num_agents * num_envs
 
     env = make(
@@ -73,10 +77,32 @@ def main():
         runner_state = (env_state, obsv, rng)
         return runner_state, runner_state
 
-    final_runner, all_runner_state = jax.lax.scan(env_step, env_init(rng), length=1000)
+    final_runner, all_runner_state = jax.lax.scan(
+        env_step, env_init(rng), length=num_steps
+    )
 
-    player = TrajRenderer(env)
-    player.render(np.array(all_runner_state[0].cartesian_states))
+    if render:
+        player = TrajRenderer(env)
+        player.render(np.array(all_runner_state[0].cartesian_states))
+    return final_runner, all_runner_state
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--num-agents", type=int, default=3)
+    parser.add_argument("--num-envs", type=int, default=10)
+    parser.add_argument("--steps", type=int, default=1000)
+    parser.add_argument(
+        "--no-render", action="store_true", help="Skip trajectory rendering."
+    )
+    args = parser.parse_args()
+
+    run_waypoint_follow(
+        num_agents=args.num_agents,
+        num_envs=args.num_envs,
+        num_steps=args.steps,
+        render=not args.no_render,
+    )
 
 
 if __name__ == "__main__":

@@ -1,13 +1,12 @@
 import pathlib
 
 from .envs import F110Env
-from .envs.utils import Param
+from .envs.utils import VALID_REWARDS, Param
 
 _VALID_SCAN_MODES = {"scan", "noscan"}
 _VALID_COLLISION_MODES = {"collision", "nocollision"}
 _VALID_LONGITUDINAL_CONTROLS = {"acceleration", "velocity"}
 _VALID_STEERING_CONTROLS = {"steeringangle", "steeringvelocity"}
-_VALID_REWARDS = {"time", "progress", "alive"}
 
 
 def _parse_positive_int(raw_value: str, field_name: str) -> int:
@@ -69,10 +68,10 @@ def _parse_scenario_fields(
     control_type = [long_type, steer_type]
 
     all_reward_function = set(reward_type.split("+"))
-    if not all_reward_function or not all_reward_function.issubset(_VALID_REWARDS):
+    if not all_reward_function or not all_reward_function.issubset(VALID_REWARDS):
         raise ValueError(
             f"Invalid reward type list: {all_reward_function}, "
-            f"must be from {sorted(_VALID_REWARDS)}."
+            f"must be from {sorted(VALID_REWARDS)}."
         )
 
     timestep_ratio = _parse_positive_int(timestep_ratio_raw, "timestep ratio")

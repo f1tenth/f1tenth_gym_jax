@@ -8,6 +8,8 @@ from flax import struct
 
 from .multi_agent_env import MultiAgentEnv
 
+VALID_REWARDS = frozenset({"time", "progress", "alive"})
+
 
 @struct.dataclass
 class State:
@@ -95,7 +97,7 @@ class Param:
     max_steps: int = int(
         90 / (timestep * timestep_ratio)
     )  # maximum number of steps to run before done
-    reward_type: str = "progress"  # reward types
+    reward_type: str = "progress"  # reward types from VALID_REWARDS, joined with "+"
 
 
 def batchify(

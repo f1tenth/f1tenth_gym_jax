@@ -44,7 +44,7 @@ from .spaces import Box
 from .track import Track
 
 # dataclasses
-from .utils import Param, State
+from .utils import VALID_REWARDS, Param, State
 
 
 class F110Env(MultiAgentEnv):
@@ -60,6 +60,12 @@ class F110Env(MultiAgentEnv):
     def __init__(self, num_agents: int = 1, params: Param = Param(), **kwargs):
         super().__init__(num_agents=num_agents)
         self.params = params
+        self.reward_types = frozenset(params.reward_type.split("+"))
+        if not self.reward_types or not self.reward_types.issubset(VALID_REWARDS):
+            raise ValueError(
+                f"Invalid reward type list: {self.reward_types}, "
+                f"must be from {sorted(VALID_REWARDS)}."
+            )
         # agents
         self.num_agents = num_agents
         self.agents = [f"agent_{i}" for i in range(num_agents)]
@@ -432,13 +438,11 @@ class F110Env(MultiAgentEnv):
             return jax.lax.select(state.collisions[i], -1.0, 0.0)
 
         def reward(i):
-            tr = jax.lax.select("time" in self.params.reward_type, time_reward(i), 0.0)
+            tr = jax.lax.select("time" in self.reward_types, time_reward(i), 0.0)
             pr = jax.lax.select(
-                "progress" in self.params.reward_type, progress_reward(i), 0.0
+                "progress" in self.reward_types, progress_reward(i), 0.0
             )
-            ar = jax.lax.select(
-                "alive" in self.params.reward_type, alive_reward(i), 0.0
-            )
+            ar = jax.lax.select("alive" in self.reward_types, alive_reward(i), 0.0)
             return tr + pr + ar
 
         return {a: reward(i) for i, a in enumerate(self.agents)}

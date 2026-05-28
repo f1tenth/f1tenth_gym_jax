@@ -143,3 +143,10 @@ class TestF110Env(unittest.TestCase):
 
         expected_reward = -env.params.timestep * env.params.timestep_ratio
         self.assertAlmostEqual(float(rewards["agent_0"]), expected_reward)
+
+    def test_invalid_reward_override_is_rejected(self):
+        with self.assertRaises(ValueError):
+            make(
+                "Spielberg_1_noscan_nocollision_progress_acceleration+steeringvelocity_1_5_v0",
+                reward_type="notprogress",
+            )

@@ -24,6 +24,11 @@ class TestF110Env(unittest.TestCase):
         self.assertEqual(env.params.reward_type, "progress")
         self.assertEqual(env.params.max_steps, 5)
 
+    def test_agent_classes_reports_homogeneous_cars(self):
+        env = make(BASE_ENV_ID)
+
+        self.assertEqual(env.agent_classes, {"car": ["agent_0", "agent_1"]})
+
     def test_reset_observation_and_state_shapes(self):
         env = make(BASE_ENV_ID)
         obs, state = env.reset(jax.random.key(0))
@@ -35,6 +40,19 @@ class TestF110Env(unittest.TestCase):
         self.assertEqual(obs["agent_0"].shape, env.observation_space("agent_0").shape)
         self.assertEqual(obs["agent_0"].shape, (11,))
         self.assertTrue(bool(jnp.all(jnp.isfinite(obs["agent_0"]))))
+
+    def test_continuous_actions_are_always_available(self):
+        env = make(BASE_ENV_ID)
+        _, state = env.reset(jax.random.key(0))
+
+        available_actions = env.get_avail_actions(state)
+
+        self.assertEqual(set(available_actions), set(env.agents))
+        for agent, mask in available_actions.items():
+            with self.subTest(agent=agent):
+                self.assertEqual(mask.shape, env.action_space(agent).shape)
+                self.assertEqual(mask.dtype, jnp.dtype(bool))
+                self.assertTrue(bool(jnp.all(mask)))
 
     def test_step_uses_agent_action_dict(self):
         env = make(BASE_ENV_ID)

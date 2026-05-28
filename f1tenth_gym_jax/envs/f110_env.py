@@ -412,6 +412,19 @@ class F110Env(MultiAgentEnv):
         return {a: observation(i, self.num_agents) for i, a in enumerate(self.agents)}
 
     @partial(jax.jit, static_argnums=[0])
+    def get_avail_actions(self, state: State) -> Dict[str, chex.Array]:
+        """Returns the available action dimensions for each continuous-control agent."""
+        return {
+            agent: jnp.ones(self.action_spaces[agent].shape, dtype=bool)
+            for agent in self.agents
+        }
+
+    @property
+    def agent_classes(self) -> dict:
+        """Returns homogeneous car agent classes for multi-agent consumers."""
+        return {"car": list(self.agents)}
+
+    @partial(jax.jit, static_argnums=[0])
     def check_done(self, state: State) -> Tuple[Dict[str, bool], State]:
         winding_vector = state.cartesian_states[:, [0, 1]] - self.winding_point
 

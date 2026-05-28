@@ -31,6 +31,29 @@ def _validate_downsample_step(downsample_step: int) -> int:
     return downsample_step
 
 
+def _validate_waypoint_table(
+    waypoints: np.ndarray,
+    description: str,
+    min_columns: int,
+    column_description: str,
+) -> np.ndarray:
+    waypoints = np.asarray(waypoints)
+    if waypoints.ndim != 2:
+        raise ValueError(f"{description} must be a 2-dimensional array.")
+    if waypoints.shape[0] < 2:
+        raise ValueError(f"{description} must contain at least two rows.")
+    if waypoints.shape[1] < min_columns:
+        raise ValueError(f"expected {description} columns as {column_description}")
+    return waypoints
+
+
+def _validate_reference_points(xs: np.ndarray, ys: np.ndarray) -> None:
+    if xs.shape[0] < 2:
+        raise ValueError("track must contain at least two points.")
+    if not np.any(np.hypot(np.diff(xs), np.diff(ys)) > 0):
+        raise ValueError("track must contain at least two distinct points.")
+
+
 class Track:
     ss: np.ndarray
     xs: np.ndarray
@@ -88,9 +111,14 @@ class Track:
         self.filepath = filepath
         self.waypoints = waypoints
         # self.s_frame_max = s_frame_max
+        xs = np.asarray(xs)
+        ys = np.asarray(ys)
 
         if xs.shape != ys.shape:
             raise ValueError("inconsistent shapes for x, y")
+        if xs.ndim != 1:
+            raise ValueError("x and y must be 1-dimensional arrays.")
+        _validate_reference_points(xs, ys)
 
         self.n = xs.shape[0]
         self.ss = ss
@@ -146,6 +174,9 @@ class Track:
         if centerline_path.exists():
             # get centerline spline here
             cl_data = np.loadtxt(centerline_path, delimiter=",")
+            cl_data = _validate_waypoint_table(
+                cl_data, "centerline", 4, "[x, y, w_left, w_right]"
+            )
             if cl_data.shape[1] != 4:
                 raise ValueError(
                     "expected centerline columns as [x, y, w_left, w_right]"
@@ -164,6 +195,9 @@ class Track:
         if raceline_path.exists():
             # get raceline spline here
             rl_data = np.loadtxt(raceline_path, delimiter=";")
+            rl_data = _validate_waypoint_table(
+                rl_data, "raceline", 7, "[s, x, y, psi, kappa, vx, ax]"
+            )
             if rl_data.shape[1] != 7:
                 raise ValueError(
                     "expected raceline columns as [s, x, y, psi, kappa, vx, ax]"
@@ -212,12 +246,16 @@ class Track:
         track: Track
             track object
         """
-        if waypoints.shape[1] < 7:
-            raise ValueError("expected waypoints as [s, x, y, psi, k, vx, ax]")
+        waypoints = _validate_waypoint_table(
+            waypoints, "waypoints", 7, "[s, x, y, psi, k, vx, ax]"
+        )
+        if s_frame_max <= 0:
+            raise ValueError("s_frame_max must be positive.")
         downsample_step = _validate_downsample_step(downsample_step)
 
         xs = waypoints[::downsample_step, 1]
         ys = waypoints[::downsample_step, 2]
+        _validate_reference_points(xs, ys)
         yaws = waypoints[::downsample_step, 3]
         ks = waypoints[::downsample_step, 4]
         vxs = waypoints[::downsample_step, 5]
@@ -264,12 +302,14 @@ class Track:
         if not filepath.exists():
             raise FileNotFoundError(f"input filepath does not exist ({filepath})")
         waypoints = np.loadtxt(filepath, delimiter=delimiter).astype(np.float32)
-        if waypoints.shape[1] < 7:
-            raise ValueError("expected waypoints as [s, x, y, psi, k, vx, ax]")
+        waypoints = _validate_waypoint_table(
+            waypoints, "waypoints", 7, "[s, x, y, psi, k, vx, ax]"
+        )
         downsample_step = _validate_downsample_step(downsample_step)
 
         xs = waypoints[::downsample_step, 1]
         ys = waypoints[::downsample_step, 2]
+        _validate_reference_points(xs, ys)
         yaws = waypoints[::downsample_step, 3]
         ks = waypoints[::downsample_step, 4]
         vxs = waypoints[::downsample_step, 5]

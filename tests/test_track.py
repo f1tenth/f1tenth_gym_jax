@@ -251,8 +251,20 @@ class TestTrack(unittest.TestCase):
         with self.assertRaises(ValueError):
             Track(np.zeros(2), np.zeros(3))
 
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "2-dimensional"):
+            Track.from_numpy(np.zeros(7), s_frame_max=1.0)
+
+        with self.assertRaisesRegex(ValueError, "at least two rows"):
+            Track.from_numpy(np.zeros((1, 7)), s_frame_max=1.0)
+
+        with self.assertRaisesRegex(ValueError, "expected waypoints columns"):
             Track.from_numpy(np.zeros((2, 6)), s_frame_max=1.0)
+
+        with self.assertRaisesRegex(ValueError, "s_frame_max"):
+            Track.from_numpy(np.zeros((2, 7)), s_frame_max=0.0)
+
+        with self.assertRaisesRegex(ValueError, "distinct points"):
+            Track.from_numpy(np.zeros((2, 7)), s_frame_max=1.0)
 
         waypoints = np.zeros((2, 7))
         with self.assertRaisesRegex(ValueError, "downsample_step"):
@@ -260,6 +272,27 @@ class TestTrack(unittest.TestCase):
 
         with self.assertRaises(FileNotFoundError):
             Track.from_raceline_file(pathlib.Path("missing_raceline.csv"))
+
+    def test_track_file_loaders_reject_malformed_tables(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filepath = pathlib.Path(tmpdir) / "single_row_raceline.csv"
+            np.savetxt(filepath, np.zeros((1, 7)), delimiter=";")
+
+            with self.assertRaisesRegex(ValueError, "2-dimensional"):
+                Track.from_raceline_file(filepath)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            map_root = pathlib.Path(tmpdir)
+            track_dir = self._write_minimal_map(map_root, "BadCenterline")
+            np.savetxt(
+                track_dir / "BadCenterline_centerline.csv",
+                np.zeros((1, 4)),
+                delimiter=",",
+            )
+
+            with patch.dict(os.environ, {"F1TENTH_GYM_JAX_MAP_DIR": tmpdir}):
+                with self.assertRaisesRegex(ValueError, "2-dimensional"):
+                    Track.from_track_name("BadCenterline")
 
     def test_from_raceline_file_rejects_invalid_downsample_step(self):
         waypoints = np.array(

@@ -114,11 +114,11 @@ class CubicSplineND:
             vxs_spline,
             axs_spline,
         ]
-        self.points_jax = jnp.array(self.points)
         if not np.all(self.points[-1] == self.points[0]):
             self.points = np.vstack(
                 (self.points, self.points[0])
             )  # Ensure the path is closed
+        self.points_jax = jnp.array(self.points)
         self.s = self.__calc_s(self.points[:, 0], self.points[:, 1])
         self.s_jax = jnp.array(self.s)
         # Use scipy CubicSpline to interpolate the points with periodic boundary conditions

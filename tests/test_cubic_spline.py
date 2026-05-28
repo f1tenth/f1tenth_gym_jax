@@ -73,3 +73,17 @@ class TestCubicSpline(unittest.TestCase):
         self.assertAlmostEqual(
             track.calc_arclength_slow(0, -1)[0], 3 * np.pi / 2, places=2
         )
+
+    def test_jax_arclength_includes_closing_segment(self):
+        track = cubic_spline.CubicSplineND(
+            np.array([1.0, 0.0, -1.0, 0.0]),
+            np.array([0.0, 1.0, 0.0, -1.0]),
+        )
+
+        point = (0.5, -0.5)
+        s, ey = track.calc_arclength(*point)
+        s_jax, ey_jax = track.calc_arclength_jax(*point)
+
+        self.assertEqual(track.points_jax.shape, track.points.shape)
+        self.assertAlmostEqual(float(s_jax), s, places=5)
+        self.assertAlmostEqual(float(ey_jax), ey, places=5)

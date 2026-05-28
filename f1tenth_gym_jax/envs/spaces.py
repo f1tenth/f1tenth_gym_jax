@@ -29,7 +29,6 @@ class Space(object):
 class Discrete(Space):
     """
     Minimal jittable class for discrete gymnax spaces.
-    TODO: For now this is a 1d space. Make composable for multi-discrete.
     """
 
     def __init__(self, num_categories: int, dtype=jnp.int32):
@@ -49,6 +48,8 @@ class Discrete(Space):
         """Check whether specific object is within space."""
         x = jnp.asarray(x)
         if x.shape != self.shape:
+            return False
+        if not jnp.issubdtype(x.dtype, jnp.integer):
             return False
         range_cond = jnp.logical_and(x >= 0, x < self.n)
         return range_cond
@@ -82,6 +83,8 @@ class MultiDiscrete(Space):
         x = jnp.asarray(x)
         if x.shape != self.shape:
             return False
+        if not jnp.issubdtype(x.dtype, jnp.integer):
+            return False
         range_cond = jnp.logical_and(x >= 0, x < self.num_categories)
         return jnp.all(range_cond)
 
@@ -89,7 +92,6 @@ class MultiDiscrete(Space):
 class Box(Space):
     """
     Minimal jittable class for array-shaped gymnax spaces.
-    TODO: Add unboundedness - sampling from other distributions, etc.
     """
 
     def __init__(
@@ -103,12 +105,37 @@ class Box(Space):
         self.dtype = dtype
         self.low = jnp.broadcast_to(jnp.asarray(low, dtype=dtype), shape)
         self.high = jnp.broadcast_to(jnp.asarray(high, dtype=dtype), shape)
+        if bool(jnp.any(self.low > self.high)):
+            raise ValueError(
+                "Box low values must be less than or equal to high values."
+            )
 
     def sample(self, rng: chex.PRNGKey) -> chex.Array:
-        """Sample random action uniformly from 1D continuous range."""
-        return jax.random.uniform(
-            rng, shape=self.shape, minval=self.low, maxval=self.high
-        ).astype(self.dtype)
+        """Sample a random value, supporting bounded and unbounded dimensions."""
+        uniform_rng, normal_rng, exp_rng = jax.random.split(rng, 3)
+        bounded = jnp.logical_and(jnp.isfinite(self.low), jnp.isfinite(self.high))
+        lower_bounded = jnp.logical_and(jnp.isfinite(self.low), jnp.isposinf(self.high))
+        upper_bounded = jnp.logical_and(jnp.isneginf(self.low), jnp.isfinite(self.high))
+
+        uniform_sample = jax.random.uniform(
+            uniform_rng,
+            shape=self.shape,
+            minval=jnp.where(bounded, self.low, 0.0),
+            maxval=jnp.where(bounded, self.high, 1.0),
+        )
+        normal_sample = jax.random.normal(normal_rng, shape=self.shape)
+        exp_sample = jax.random.exponential(exp_rng, shape=self.shape)
+
+        sample = jnp.where(
+            bounded,
+            uniform_sample,
+            jnp.where(
+                lower_bounded,
+                self.low + exp_sample,
+                jnp.where(upper_bounded, self.high - exp_sample, normal_sample),
+            ),
+        )
+        return sample.astype(self.dtype)
 
     def contains(self, x: jnp.int_) -> bool:
         """Check whether specific object is within space."""

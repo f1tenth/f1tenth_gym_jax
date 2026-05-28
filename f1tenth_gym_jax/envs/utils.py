@@ -34,7 +34,7 @@ class State:
     # race stuff
     num_laps: chex.Array  # [n_agent, ]
 
-    # laser scans TODO: might not need to be part of the state since doesn't depend on previous
+    # latest laser scans used when scan observations are enabled
     scans: chex.Array  # [n_agent, n_rays]
 
     # winding vector

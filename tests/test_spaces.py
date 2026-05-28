@@ -14,6 +14,7 @@ class TestSpaces(unittest.TestCase):
         self.assertTrue(bool(space.contains(jnp.array(2))))
         self.assertFalse(bool(space.contains(jnp.array(3))))
         self.assertFalse(bool(space.contains(jnp.array([1]))))
+        self.assertFalse(bool(space.contains(jnp.array(1.0))))
         with self.assertRaises(ValueError):
             Discrete(0)
 
@@ -24,6 +25,7 @@ class TestSpaces(unittest.TestCase):
         self.assertTrue(bool(space.contains(jnp.array([1, 2]))))
         self.assertFalse(bool(space.contains(jnp.array([2, 2]))))
         self.assertFalse(bool(space.contains(jnp.array([1]))))
+        self.assertFalse(bool(space.contains(jnp.array([1.0, 2.0]))))
         with self.assertRaises(ValueError):
             MultiDiscrete([2, 0])
 
@@ -36,6 +38,25 @@ class TestSpaces(unittest.TestCase):
         self.assertTrue(bool(space.contains(jnp.array([0.0, 1.0]))))
         self.assertFalse(bool(space.contains(jnp.array([2.0, 1.0]))))
         self.assertFalse(bool(space.contains(jnp.array([0.0]))))
+
+    def test_box_space_samples_unbounded_dimensions(self):
+        space = Box(
+            jnp.array([-jnp.inf, 0.0, -jnp.inf, -1.0]),
+            jnp.array([jnp.inf, jnp.inf, 1.0, 1.0]),
+            (4,),
+        )
+
+        sample = space.sample(jax.random.key(1))
+
+        self.assertEqual(sample.shape, (4,))
+        self.assertTrue(bool(jnp.all(jnp.isfinite(sample))))
+        self.assertTrue(bool(space.contains(sample)))
+        self.assertGreaterEqual(float(sample[1]), 0.0)
+        self.assertLessEqual(float(sample[2]), 1.0)
+
+    def test_box_space_rejects_invalid_bounds(self):
+        with self.assertRaises(ValueError):
+            Box(jnp.array([1.0]), jnp.array([0.0]), (1,))
 
     def test_dict_space_contains_dict_values(self):
         space = Dict({"a": Discrete(2), "b": Box(-1.0, 1.0, (2,))})

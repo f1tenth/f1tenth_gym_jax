@@ -26,6 +26,27 @@ class TestMetadata(unittest.TestCase):
         self.assertIn("readthedocs.org/projects/f1tenth-gym-jax/badge", readme)
         self.assertIn("f1tenth-gym-jax.readthedocs.io/en/latest", readme)
 
+    def test_api_docs_include_all_source_modules(self):
+        repo_root = pathlib.Path(__file__).parent.parent
+        package_root = repo_root / "f1tenth_gym_jax"
+        docs_text = "\n".join(
+            path.read_text() for path in sorted((repo_root / "docs/api").glob("*.rst"))
+        )
+
+        modules = []
+        for path in sorted(package_root.rglob("*.py")):
+            if path.name == "__init__.py":
+                continue
+
+            module_path = path.relative_to(repo_root).with_suffix("")
+            modules.append(".".join(module_path.parts))
+
+        missing_modules = [
+            module for module in modules if f".. automodule:: {module}" not in docs_text
+        ]
+
+        self.assertEqual(missing_modules, [])
+
     def test_ci_jobs_install_extras_used_by_their_commands(self):
         workflow_path = (
             pathlib.Path(__file__).parent.parent / ".github/workflows/ci.yml"

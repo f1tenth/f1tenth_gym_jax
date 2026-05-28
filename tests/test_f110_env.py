@@ -220,6 +220,10 @@ class TestF110Env(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "number of agents"):
             F110Env(num_agents=0)
 
+    def test_constructor_rejects_ignored_parameter_overrides(self):
+        with self.assertRaisesRegex(TypeError, "Use f1tenth_gym_jax.make"):
+            F110Env(timestep=0.02)
+
     def test_invalid_constructor_bounds_are_rejected(self):
         invalid_bounds = [
             ({"s_min": 0.5, "s_max": 0.5}, "steering angle"),

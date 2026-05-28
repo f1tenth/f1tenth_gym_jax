@@ -67,12 +67,16 @@ class F110Env(MultiAgentEnv):
         Number of agents in the environment.
     params : Param, default=Param()
         Vehicle, map, reward, control, and simulation parameters.
-    **kwargs
-        Accepted for compatibility with older construction code.
 
     """
 
     def __init__(self, num_agents: int = 1, params: Param = Param(), **kwargs):
+        if kwargs:
+            unknown = ", ".join(sorted(kwargs))
+            raise TypeError(
+                f"Unsupported F110Env constructor keyword argument(s): {unknown}. "
+                "Use f1tenth_gym_jax.make(..., **overrides) for parameter overrides."
+            )
         _validate_positive_int("number of agents", num_agents)
         _validate_positive_int("timestep ratio", params.timestep_ratio)
         _validate_positive_int("max steps", params.max_steps)

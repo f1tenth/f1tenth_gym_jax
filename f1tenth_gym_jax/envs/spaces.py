@@ -10,6 +10,33 @@ from typing import Sequence, Tuple, Union
 import chex
 import jax
 import jax.numpy as jnp
+import numpy as np
+
+
+def _validate_integer_dtype(name: str, dtype) -> None:
+    if not np.issubdtype(np.dtype(dtype), np.integer):
+        raise ValueError(f"{name} dtype must be an integer dtype.")
+
+
+def _validate_category_count(num_categories: int) -> int:
+    raw = np.asarray(num_categories)
+    if raw.shape != () or not np.issubdtype(raw.dtype, np.integer):
+        raise ValueError("Discrete spaces require an integer category count.")
+    value = int(raw)
+    if value < 1:
+        raise ValueError("Discrete spaces must have at least one category.")
+    return value
+
+
+def _validate_category_counts(num_categories: Sequence[int]) -> np.ndarray:
+    raw = np.asarray(num_categories)
+    if raw.ndim != 1 or raw.size == 0:
+        raise ValueError("MultiDiscrete must contain at least one category.")
+    if not np.issubdtype(raw.dtype, np.integer):
+        raise ValueError("MultiDiscrete categories must be integers.")
+    if np.any(raw < 1):
+        raise ValueError("MultiDiscrete categories must all be positive.")
+    return raw
 
 
 class Space(object):
@@ -26,9 +53,8 @@ class Discrete(Space):
     """Minimal JAX-compatible discrete space."""
 
     def __init__(self, num_categories: int, dtype=jnp.int32):
-        if num_categories < 1:
-            raise ValueError("Discrete spaces must have at least one category.")
-        self.n = num_categories
+        _validate_integer_dtype("Discrete", dtype)
+        self.n = _validate_category_count(num_categories)
         self.shape = ()
         self.dtype = dtype
 
@@ -54,8 +80,8 @@ class MultiDiscrete(Space):
 
     def __init__(self, num_categories: Sequence[int], dtype=jnp.int32):
         """Num categories is the number of cat actions for each dim, [2,2,2]=2 actions x 3 dim"""
-        if any(n < 1 for n in num_categories):
-            raise ValueError("MultiDiscrete categories must all be positive.")
+        _validate_integer_dtype("MultiDiscrete", dtype)
+        num_categories = _validate_category_counts(num_categories)
         self.num_categories = jnp.asarray(num_categories, dtype=dtype)
         self.shape = (len(num_categories),)
         self.dtype = dtype

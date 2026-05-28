@@ -17,6 +17,10 @@ class TestSpaces(unittest.TestCase):
         self.assertFalse(bool(space.contains(jnp.array(1.0))))
         with self.assertRaises(ValueError):
             Discrete(0)
+        with self.assertRaisesRegex(ValueError, "integer category"):
+            Discrete(2.5)
+        with self.assertRaisesRegex(ValueError, "integer dtype"):
+            Discrete(2, dtype=jnp.float32)
 
     def test_multi_discrete_space(self):
         space = MultiDiscrete([2, 3])
@@ -30,6 +34,12 @@ class TestSpaces(unittest.TestCase):
         self.assertFalse(bool(space.contains(jnp.array([1.0, 2.0]))))
         with self.assertRaises(ValueError):
             MultiDiscrete([2, 0])
+        with self.assertRaisesRegex(ValueError, "at least one category"):
+            MultiDiscrete([])
+        with self.assertRaisesRegex(ValueError, "integers"):
+            MultiDiscrete([2.5, 3.0])
+        with self.assertRaisesRegex(ValueError, "integer dtype"):
+            MultiDiscrete([2, 3], dtype=jnp.float32)
 
     def test_box_space_supports_vector_bounds(self):
         space = Box(jnp.array([-1.0, 0.0]), jnp.array([1.0, 2.0]), (2,))

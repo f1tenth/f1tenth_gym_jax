@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 import yaml
 
@@ -206,6 +207,31 @@ class TestExamples(unittest.TestCase):
             rtol=1e-6,
             atol=1e-5,
         )
+
+    def test_mppi_reference_starts_at_projected_segment_arclength(self):
+        mppi_example = _load_example_module("mppi_example")
+        env = make(
+            "Spielberg_1_noscan_nocollision_progress_acceleration+steeringvelocity_1_5_v0"
+        )
+        config = mppi_example.MPPIConfig(n_samples=2, n_steps=2)
+        mppi = mppi_example.MPPI(config, env, jax.random.key(0))
+
+        raceline = env.track.raceline
+        midpoint = np.array(
+            [
+                0.5 * (raceline.xs[0] + raceline.xs[1]),
+                0.5 * (raceline.ys[0] + raceline.ys[1]),
+            ]
+        )
+        state = jnp.array(
+            [midpoint[0], midpoint[1], 0.0, 1.0, raceline.psis[0], 0.0, 0.0]
+        )
+
+        reference, segment_index = mppi.get_ref(state, n_steps=1)
+
+        expected_s = raceline.s[0] + 0.5 * (raceline.s[1] - raceline.s[0])
+        self.assertEqual(int(segment_index), 0)
+        self.assertAlmostEqual(float(reference[0, 4]), expected_s, places=5)
 
     def test_mppi_example_runs_without_plots_or_rendering(self):
         mppi_example = _load_example_module("mppi_example")

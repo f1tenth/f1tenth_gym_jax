@@ -154,12 +154,16 @@ class MPPI:
 
     @partial(jax.jit, static_argnums=(0, 2))
     def get_ref(self, state, n_steps):
-        dist, _, ind = nearest_point_on_trajectory_jax(
-            state[:2], self.waypoints[:, 1:3]
-        )
+        _, t, ind = nearest_point_on_trajectory_jax(state[:2], self.waypoints[:, 1:3])
+        dist_from_segment_start = t * self.waypoint_distances[ind]
         speeds = jnp.clip(jnp.ones(n_steps) * state[3], min=0.2)
         reference = get_ref_traj(
-            speeds, dist, ind, self.waypoints, self.waypoint_distances, self.config.dt
+            speeds,
+            dist_from_segment_start,
+            ind,
+            self.waypoints,
+            self.waypoint_distances,
+            self.config.dt,
         )
         return reference, ind
 

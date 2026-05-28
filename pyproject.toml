@@ -1,6 +1,6 @@
 [project]
 name = "f1tenth_gym_jax"
-version = "1.0.0dev"
+version = "1.0.0.dev0"
 description = "JAX-compatible Gym environment for F1TENTH"
 authors = [
     { name = "Hongrui Zheng" },

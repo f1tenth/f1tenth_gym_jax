@@ -1,7 +1,14 @@
 # flake8: noqa
 import os
+import tomllib
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_METADATA = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text())[
+    "project"
+]
 
 source_suffix = ".rst"
 source_encoding = "utf-8-sig"
@@ -45,13 +52,13 @@ html_logo = "assets/f1tenth_gym.svg"
 
 # -- Project information -----------------------------------------------------
 
-project = "f1tenth_gym_jax"
+project = PROJECT_METADATA["name"]
 copyright = "2021, Hongrui Zheng, Matthew O'Kelly, Aman Sinha"
 author = "Hongrui Zheng"
 
 # The full version, including alpha/beta/rc tags
-release = "latest"
-version = "latest"
+release = PROJECT_METADATA["version"]
+version = release
 
 
 # -- General configuration ---------------------------------------------------

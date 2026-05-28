@@ -86,10 +86,10 @@ dev = [
 jax-pf = { git = "https://github.com/hzheng40/jax_pf" }
 
 [tool.hatch.build.targets.sdist]
-include = ["f1tenth_gym_jax"]
+include = ["f1tenth_gym_jax", "maps"]
 
 [tool.hatch.build.targets.wheel]
-include = ["f1tenth_gym_jax"]
+include = ["f1tenth_gym_jax", "maps"]
 
 [build-system]
 requires = ["hatchling"]

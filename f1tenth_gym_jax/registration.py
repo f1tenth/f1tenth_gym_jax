@@ -1,5 +1,5 @@
 from .envs import F110Env
-from .envs.track.utils import get_map_search_dirs
+from .envs.track.utils import _normalized_track_name, get_map_search_dirs
 from .envs.utils import VALID_REWARDS, Param
 
 _VALID_SCAN_MODES = {"scan", "noscan"}
@@ -191,7 +191,11 @@ def list_available_maps() -> list[str]:
     local_maps = []
     for map_dir in get_map_search_dirs():
         if map_dir.exists():
-            local_maps.extend(path.name for path in map_dir.iterdir() if path.is_dir())
+            local_maps.extend(
+                _normalized_track_name(path)
+                for path in map_dir.iterdir()
+                if path.is_dir()
+            )
     return sorted(set(registered_maps + local_maps))
 
 

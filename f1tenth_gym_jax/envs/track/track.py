@@ -107,8 +107,9 @@ class Track:
     def from_track_name(map_name: str):
         # find track dir
         track_dir = find_track_dir(map_name)
+        track_file_stem = track_dir.stem
         # load map yaml
-        with (track_dir / f"{track_dir.stem}.yaml").open() as yaml_file:
+        with (track_dir / f"{track_file_stem}.yaml").open() as yaml_file:
             map_metadata = yaml.safe_load(yaml_file)
         resolution = map_metadata["resolution"]
         ox = map_metadata["origin"][0]
@@ -125,11 +126,10 @@ class Track:
         occ_map[occ_map > 128] = 255.0
 
         # if exist load centerline
-        if (track_dir / f"{map_name}_centerline.csv").exists():
+        centerline_path = track_dir / f"{track_file_stem}_centerline.csv"
+        if centerline_path.exists():
             # get centerline spline here
-            cl_data = np.loadtxt(
-                track_dir / f"{map_name}_centerline.csv", delimiter=","
-            )
+            cl_data = np.loadtxt(centerline_path, delimiter=",")
             if cl_data.shape[1] != 4:
                 raise ValueError(
                     "expected centerline columns as [x, y, w_left, w_right]"
@@ -144,9 +144,10 @@ class Track:
             raise ValueError("At least centerline file is expected to construct track.")
 
         # if exist load raceline
-        if (track_dir / f"{map_name}_raceline.csv").exists():
+        raceline_path = track_dir / f"{track_file_stem}_raceline.csv"
+        if raceline_path.exists():
             # get raceline spline here
-            rl_data = np.loadtxt(track_dir / f"{map_name}_raceline.csv", delimiter=";")
+            rl_data = np.loadtxt(raceline_path, delimiter=";")
             if rl_data.shape[1] != 7:
                 raise ValueError(
                     "expected raceline columns as [s, x, y, psi, kappa, vx, ax]"

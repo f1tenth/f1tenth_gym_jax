@@ -178,6 +178,11 @@ class TestRegistration(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             cached_map = pathlib.Path(tmpdir) / "CustomCachedMap"
             cached_map.mkdir()
+            cached_map_with_spaces = pathlib.Path(tmpdir) / "Spaced Local Map"
+            cached_map_with_spaces.mkdir()
 
             with patch.dict(os.environ, {"F1TENTH_GYM_JAX_MAP_DIR": tmpdir}):
-                self.assertIn("CustomCachedMap", list_available_maps())
+                available_maps = list_available_maps()
+
+            self.assertIn("CustomCachedMap", available_maps)
+            self.assertIn("SpacedLocalMap", available_maps)

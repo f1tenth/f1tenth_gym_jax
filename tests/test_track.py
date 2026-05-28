@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 import yaml
+from PIL import Image
 
 from f1tenth_gym_jax.envs.track import Track, find_track_dir
 from f1tenth_gym_jax.envs.track.utils import _safe_extractall
@@ -22,6 +23,41 @@ class TestTrack(unittest.TestCase):
             info.size = len(payload)
             tar.addfile(info, io.BytesIO(payload))
         return archive.getvalue()
+
+    def _write_minimal_map(self, map_root: pathlib.Path, map_dirname: str):
+        track_dir = map_root / map_dirname
+        track_dir.mkdir()
+
+        image_name = f"{map_dirname}.png"
+        Image.fromarray(np.full((16, 16), 255, dtype=np.uint8)).save(
+            track_dir / image_name
+        )
+        with (track_dir / f"{map_dirname}.yaml").open("w") as yaml_file:
+            yaml.safe_dump(
+                {
+                    "image": image_name,
+                    "resolution": 0.1,
+                    "origin": [0.0, 0.0, 0.0],
+                    "negate": 0,
+                    "occupied_thresh": 0.45,
+                    "free_thresh": 0.196,
+                },
+                yaml_file,
+            )
+        centerline = np.array(
+            [
+                [0.0, 0.0, 1.0, 1.0],
+                [1.0, 0.0, 1.0, 1.0],
+                [1.0, 1.0, 1.0, 1.0],
+                [0.0, 1.0, 1.0, 1.0],
+            ]
+        )
+        np.savetxt(
+            track_dir / f"{map_dirname}_centerline.csv",
+            centerline,
+            delimiter=",",
+        )
+        return track_dir
 
     def test_error_handling(self):
         wrong_track_name = "i_dont_exists"
@@ -53,6 +89,16 @@ class TestTrack(unittest.TestCase):
 
         request_get.assert_called_once()
         response.raise_for_status.assert_called_once()
+
+    def test_local_track_with_spaces_uses_actual_file_stem(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            track_dir = self._write_minimal_map(pathlib.Path(tmpdir), "Space Map")
+
+            with patch.dict(os.environ, {"F1TENTH_GYM_JAX_MAP_DIR": tmpdir}):
+                track = Track.from_track_name("SpaceMap")
+
+        self.assertEqual(track.filepath, track_dir / "Space Map.png")
+        self.assertGreater(track.centerline.s[-1], 0.0)
 
     def test_safe_archive_extraction_rejects_path_traversal(self):
         with tempfile.TemporaryDirectory() as tmpdir:

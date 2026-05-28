@@ -45,6 +45,10 @@ def get_map_search_dirs() -> tuple[pathlib.Path, ...]:
     return tuple(search_dirs)
 
 
+def _normalized_track_name(track_dir: pathlib.Path) -> str:
+    return track_dir.stem.replace(" ", "")
+
+
 def _find_existing_track_dir(
     track_name: str, map_dirs: tuple[pathlib.Path, ...]
 ) -> pathlib.Path | None:
@@ -52,7 +56,7 @@ def _find_existing_track_dir(
         if not map_dir.exists():
             continue
         for subdir in map_dir.iterdir():
-            if track_name == str(subdir.stem).replace(" ", ""):
+            if track_name == _normalized_track_name(subdir):
                 return subdir
     return None
 

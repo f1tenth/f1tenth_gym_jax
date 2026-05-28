@@ -20,6 +20,9 @@ cd f1tenth_gym_jax
 uv sync
 ```
 
+`uv` is the supported install path because it resolves the git-backed
+`jax-pf` dependency recorded in `uv.lock`.
+
 Optional extras are split by workflow:
 
 ```bash

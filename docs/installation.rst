@@ -7,6 +7,9 @@ environment.
 Using uv
 --------
 
+``uv`` is the supported install path for this repository. It reads
+``uv.lock`` and the git source configured for ``jax-pf``.
+
 .. code:: bash
 
     git clone https://github.com/f1tenth/f1tenth_gym_jax.git
@@ -24,10 +27,15 @@ Install optional dependencies for specific workflows:
 Using pip
 ---------
 
+Plain ``pip install -e .`` does not read ``[tool.uv.sources]`` from
+``pyproject.toml``. If you need a pip-only workflow, install the git-backed
+``jax-pf`` dependency first, then install this package.
+
 .. code:: bash
 
     git clone https://github.com/f1tenth/f1tenth_gym_jax.git
     cd f1tenth_gym_jax
+    python -m pip install "jax-pf @ git+https://github.com/hzheng40/jax_pf"
     python -m pip install -e .
 
 Docker

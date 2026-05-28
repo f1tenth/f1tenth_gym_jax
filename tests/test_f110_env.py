@@ -171,6 +171,18 @@ class TestF110Env(unittest.TestCase):
             ("model", "bicycle", "dynamics model"),
             ("longitudinal_action_type", "throttle", "longitudinal action type"),
             ("steering_action_type", "wheel", "steering action type"),
+            ("mu", 0.0, "surface friction coefficient"),
+            ("C_Sf", 0.0, "front cornering stiffness"),
+            ("C_Sr", 0.0, "rear cornering stiffness"),
+            ("lf", 0.0, "front axle distance"),
+            ("lr", 0.0, "rear axle distance"),
+            ("h", 0.0, "center of gravity height"),
+            ("m", 0.0, "vehicle mass"),
+            ("I", 0.0, "vehicle inertia"),
+            ("v_switch", 0.0, "switching velocity"),
+            ("a_max", 0.0, "maximum acceleration"),
+            ("width", 0.0, "vehicle width"),
+            ("length", 0.0, "vehicle length"),
             ("timestep", 0.0, "timestep"),
             ("timestep_ratio", 0, "timestep ratio"),
             ("max_steps", 0, "max steps"),
@@ -189,3 +201,15 @@ class TestF110Env(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "number of agents"):
             F110Env(num_agents=0)
+
+    def test_invalid_constructor_bounds_are_rejected(self):
+        invalid_bounds = [
+            ({"s_min": 0.5, "s_max": 0.5}, "steering angle"),
+            ({"sv_min": 1.0, "sv_max": -1.0}, "steering velocity"),
+            ({"v_min": 3.0, "v_max": 3.0}, "velocity"),
+        ]
+
+        for kwargs, message in invalid_bounds:
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaisesRegex(ValueError, message):
+                    F110Env(params=Param(**kwargs))

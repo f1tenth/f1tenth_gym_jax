@@ -183,6 +183,8 @@ class TestRegistration(unittest.TestCase):
             ({"timestep": 0.0}, "timestep"),
             ({"timestep_ratio": 0}, "timestep ratio"),
             ({"max_steps": 0}, "max steps"),
+            ({"a_max": 0.0}, "maximum acceleration"),
+            ({"v_min": 2.0, "v_max": 1.0}, "velocity"),
         ]
 
         for kwargs, message in invalid_overrides:

@@ -52,6 +52,11 @@ def _validate_positive_number(name: str, value: float) -> None:
         raise ValueError(f"{name} must be positive.")
 
 
+def _validate_ordered_bounds(name: str, lower: float, upper: float) -> None:
+    if not isinstance(lower, Real) or not isinstance(upper, Real) or lower >= upper:
+        raise ValueError(f"{name} lower bound must be less than upper bound.")
+
+
 class F110Env(MultiAgentEnv):
     """
     JAX compatible gym environment for F1TENTH
@@ -71,10 +76,25 @@ class F110Env(MultiAgentEnv):
         _validate_positive_int("number of scan beams", params.num_beams)
         if params.num_beams < 2:
             raise ValueError("number of scan beams must be at least 2.")
+        _validate_positive_number("surface friction coefficient", params.mu)
+        _validate_positive_number("front cornering stiffness", params.C_Sf)
+        _validate_positive_number("rear cornering stiffness", params.C_Sr)
+        _validate_positive_number("front axle distance", params.lf)
+        _validate_positive_number("rear axle distance", params.lr)
+        _validate_positive_number("center of gravity height", params.h)
+        _validate_positive_number("vehicle mass", params.m)
+        _validate_positive_number("vehicle inertia", params.I)
+        _validate_positive_number("switching velocity", params.v_switch)
+        _validate_positive_number("maximum acceleration", params.a_max)
+        _validate_positive_number("vehicle width", params.width)
+        _validate_positive_number("vehicle length", params.length)
         _validate_positive_number("timestep", params.timestep)
         _validate_positive_number("field of view", params.fov)
         _validate_positive_number("scan epsilon", params.eps)
         _validate_positive_number("max scan range", params.max_range)
+        _validate_ordered_bounds("steering angle", params.s_min, params.s_max)
+        _validate_ordered_bounds("steering velocity", params.sv_min, params.sv_max)
+        _validate_ordered_bounds("velocity", params.v_min, params.v_max)
 
         super().__init__(num_agents=num_agents)
         self.params = params

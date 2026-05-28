@@ -37,6 +37,9 @@ Valid longitudinal controls are ``acceleration`` and ``velocity``. Valid
 steering controls are ``steeringvelocity`` and ``steeringangle``. Rewards can be
 combined with ``+`` from ``time``, ``progress``, and ``alive``.
 
+Older model filenames that omit ``timestep_ratio`` are still accepted for
+compatibility and use ``timestep_ratio=1``.
+
 Parameter Overrides
 -------------------
 

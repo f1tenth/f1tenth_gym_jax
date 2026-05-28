@@ -43,6 +43,23 @@ class TestRegistration(unittest.TestCase):
             ),
         )
 
+    def test_parse_legacy_default_ratio_scenario(self):
+        scenario = "Spielberg_1_scan_collision_progress+alive_velocity+steeringangle_v0"
+
+        self.assertEqual(
+            _parse_scenario(scenario),
+            (
+                "Spielberg",
+                1,
+                True,
+                True,
+                "progress+alive",
+                ["velocity", "steeringangle"],
+                1,
+                None,
+            ),
+        )
+
     def test_parse_scenario_with_underscored_map_name(self):
         scenario = (
             "Spielberg_blank_1_noscan_nocollision_progress_"
@@ -53,6 +70,26 @@ class TestRegistration(unittest.TestCase):
             _parse_scenario(scenario),
             (
                 "Spielberg_blank",
+                1,
+                False,
+                False,
+                "progress",
+                ["acceleration", "steeringvelocity"],
+                1,
+                None,
+            ),
+        )
+
+    def test_parse_scenario_with_numeric_underscored_map_name(self):
+        scenario = (
+            "Map_2024_1_noscan_nocollision_progress_"
+            "acceleration+steeringvelocity_1_v0"
+        )
+
+        self.assertEqual(
+            _parse_scenario(scenario),
+            (
+                "Map_2024",
                 1,
                 False,
                 False,

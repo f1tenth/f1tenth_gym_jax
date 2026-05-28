@@ -1,17 +1,41 @@
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Callable, Optional
 
 import numpy as np
 import pyqtgraph as pg
 from PIL import ImageColor
 from PyQt6 import QtCore, QtGui, QtWidgets
-from pyqtgraph.examples.utils import FrameCounter
 from pyqtgraph.exporters import ImageExporter
 
 from ..collision_models import get_vertices
 from ..f110_env import F110Env
 from .objects import _get_tire_vertices
+
+
+class _FrameCounter(QtCore.QObject):
+    sigFpsUpdate = QtCore.pyqtSignal(object)
+
+    def __init__(self, interval: int = 1000):
+        super().__init__()
+        self.count = 0
+        self.last_update = 0.0
+        self.interval = interval
+
+    def update(self) -> None:
+        self.count += 1
+        if self.last_update == 0.0:
+            self.last_update = perf_counter()
+            self.startTimer(self.interval)
+
+    def timerEvent(self, evt) -> None:
+        now = perf_counter()
+        elapsed = now - self.last_update
+        fps = self.count / elapsed
+        self.last_update = now
+        self.count = 0
+        self.sigFpsUpdate.emit(fps)
 
 
 class TrajRenderer:
@@ -177,7 +201,7 @@ class TrajRenderer:
         self.window.setBackground("w")
 
         # fps and time renderer
-        self.clock = FrameCounter()
+        self.clock = _FrameCounter()
 
         self.fps_renderer = pg.TextItem("FPS: 0.0", anchor=(0, 1), color=(255, 0, 0))
         self.time_renderer = pg.TextItem("0.0", anchor=(1, 1), color=(255, 0, 0))

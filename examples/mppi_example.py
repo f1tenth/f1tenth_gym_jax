@@ -3,6 +3,7 @@ import os
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".99"
 
+import argparse
 from functools import partial
 from typing import Callable
 
@@ -113,10 +114,10 @@ class MPPI:
 
         line = self.env.track.raceline
         self.waypoints = jnp.column_stack(
-            (line.ks, line.xs, line.ys, line.psis, line.vxs)
+            (line.s, line.xs, line.ys, line.psis, line.vxs)
         )
         self.waypoint_distances = jnp.linalg.norm(
-            self.waypoints[1:, :2] - self.waypoints[:-1, :2], axis=1
+            self.waypoints[1:, 1:3] - self.waypoints[:-1, 1:3], axis=1
         )
 
     @partial(jax.jit, static_argnums=(0))
@@ -206,11 +207,16 @@ class MPPI:
         return a_opt, states, actions, opt_states, ref, w[:, :, 0], rng_da
 
 
-def main():
-    num_agents = 2
-    num_envs = 2
+def run_mppi(
+    num_agents: int = 2,
+    num_envs: int = 2,
+    num_steps: int = 7000,
+    config: MPPIConfig = MPPIConfig(),
+    plot: bool = True,
+    render: bool = True,
+):
     num_actors = num_agents * num_envs
-    num_states = 7
+    num_states = config.state_dim
 
     env = make(
         f"Spielberg_{num_agents}_noscan_nocollision_progress_acceleration+steeringvelocity_1_v0"
@@ -218,8 +224,6 @@ def main():
 
     rng = jax.random.key(0)
     rng2 = jax.random.key(1)
-
-    config = MPPIConfig()
 
     mppi = MPPI(config, env, rng)
 
@@ -310,27 +314,35 @@ def main():
         return runner_state, results
 
     final_runner, (all_runner_state, all_reward, all_done) = jax.lax.scan(
-        _env_step, _env_init(), length=7000
+        _env_step, _env_init(), length=num_steps
     )
+
+    if not plot and not render:
+        return final_runner, all_runner_state, all_reward, all_done
+
+    if not plot:
+        player = TrajRenderer(env)
+        player.render(np.array(all_runner_state[0].cartesian_states))
+        return final_runner, all_runner_state, all_reward, all_done
 
     fig, ax = plt.subplots(3, 1, sharex=True, figsize=(10, 10))
 
     accum_angles = all_runner_state[0].accumulated_angles
     for i in range(num_envs):
-        ax[0].plot(accum_angles[:, i, 0], label=f"env {i}, agent 0")
-        ax[0].plot(accum_angles[:, i, 1], label=f"env {i}, agent 1")
+        for j in range(num_agents):
+            ax[0].plot(accum_angles[:, i, j], label=f"env {i}, agent {j}")
     ax[0].set_title("Accumulated angles")
     ax[0].legend()
 
     for i in range(num_envs):
-        ax[1].plot(all_reward[:, i, 0], label=f"env {i}, agent 0")
-        ax[1].plot(all_reward[:, i, 1], label=f"env {i}, agent 1")
+        for j in range(num_agents):
+            ax[1].plot(all_reward[:, i, j], label=f"env {i}, agent {j}")
     ax[1].set_title("Reward per step")
     ax[1].legend()
 
     for i in range(num_envs):
-        ax[2].plot(all_done[:, i, 0], label=f"env {i}, agent 0")
-        ax[2].plot(all_done[:, i, 1], label=f"env {i}, agent 1")
+        for j in range(num_agents):
+            ax[2].plot(all_done[:, i, j], label=f"env {i}, agent {j}")
     ax[2].set_title("Done per step")
     ax[2].legend()
     plt.show()
@@ -343,7 +355,7 @@ def main():
     all_costs = all_runner_state[7]
 
     check_ind = 0
-    step_ind = 200
+    step_ind = min(200, num_steps - 1)
     sample = all_samples[step_ind, check_ind, :, :, :]
     a_sample = all_a[step_ind, check_ind, :, :]
     opt_a_sample = all_opt_a[step_ind, check_ind, :, :]
@@ -450,8 +462,38 @@ def main():
         )
     plt.show()
 
-    player = TrajRenderer(env)
-    player.render(np.array(all_runner_state[0].cartesian_states))
+    if render:
+        player = TrajRenderer(env)
+        player.render(np.array(all_runner_state[0].cartesian_states))
+
+    return final_runner, all_runner_state, all_reward, all_done
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--num-agents", type=int, default=2)
+    parser.add_argument("--num-envs", type=int, default=2)
+    parser.add_argument("--steps", type=int, default=7000)
+    default_config = MPPIConfig()
+    parser.add_argument("--num-samples", type=int, default=default_config.n_samples)
+    parser.add_argument("--horizon", type=int, default=default_config.n_steps)
+    parser.add_argument(
+        "--no-plots", action="store_true", help="Skip matplotlib plots."
+    )
+    parser.add_argument(
+        "--no-render", action="store_true", help="Skip trajectory rendering."
+    )
+    args = parser.parse_args()
+
+    config = MPPIConfig(n_samples=args.num_samples, n_steps=args.horizon)
+    run_mppi(
+        num_agents=args.num_agents,
+        num_envs=args.num_envs,
+        num_steps=args.steps,
+        config=config,
+        plot=not args.no_plots,
+        render=not args.no_render,
+    )
 
 
 if __name__ == "__main__":

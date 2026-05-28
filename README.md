@@ -75,6 +75,8 @@ Spielberg_1_scan_collision_progress+alive_velocity+steeringangle_10_500_v0
 ```
 
 The final `v0` is the environment ID version.
+Older model filenames that omit `timestep_ratio` are still accepted and use
+`timestep_ratio=1`.
 
 ## Docker
 

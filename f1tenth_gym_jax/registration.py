@@ -10,62 +10,32 @@ _VALID_STEERING_CONTROLS = {"steeringangle", "steeringvelocity"}
 _VALID_REWARDS = {"time", "progress", "alive"}
 
 
-def _parse_scenario(scenario: str):
-    scenario_parts = scenario.split("_")
-    if len(scenario_parts) < 8:
+def _parse_positive_int(raw_value: str, field_name: str) -> int:
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
         raise ValueError(
-            "Environment ID must follow "
-            "{map}_{num_agents}_{scan|noscan}_{collision|nocollision}_{rewards}_"
-            "{longitudinal+steering}_{timestep_ratio}[_max_steps]_v0."
-        )
-    if scenario_parts[-1] != "v0":
-        raise ValueError(f"Invalid environment version: {scenario_parts[-1]}.")
+            f"Invalid {field_name}: {raw_value}, must be an integer."
+        ) from exc
+    if value <= 0:
+        raise ValueError(f"Invalid {field_name}: {value}, must be a positive integer.")
+    return value
 
-    if len(scenario_parts) >= 9:
-        try:
-            int(scenario_parts[-8])
-            has_explicit_max_steps = True
-        except ValueError:
-            has_explicit_max_steps = False
-    else:
-        has_explicit_max_steps = False
 
-    if has_explicit_max_steps:
-        map_name = "_".join(scenario_parts[:-8])
-        (
-            num_agents_raw,
-            scan_mode,
-            collision_mode,
-            reward_type,
-            control_type,
-            timestep_ratio_raw,
-            max_steps_raw,
-        ) = scenario_parts[-8:-1]
-    else:
-        map_name = "_".join(scenario_parts[:-7])
-        (
-            num_agents_raw,
-            scan_mode,
-            collision_mode,
-            reward_type,
-            control_type,
-            timestep_ratio_raw,
-        ) = scenario_parts[-7:-1]
-        max_steps_raw = "v0"
-
+def _parse_scenario_fields(
+    map_name: str,
+    num_agents_raw: str,
+    scan_mode: str,
+    collision_mode: str,
+    reward_type: str,
+    control_type_raw: str,
+    timestep_ratio_raw: str,
+    max_steps_raw: str,
+):
     if not map_name:
         raise ValueError("Environment ID is missing a map name.")
 
-    try:
-        num_agents = int(num_agents_raw)
-    except ValueError as exc:
-        raise ValueError(
-            f"Invalid number of agents: {num_agents_raw}, must be an integer."
-        ) from exc
-
-    # check whether num_agents is valid
-    if num_agents < 1:
-        raise ValueError(f"Invalid number of agents: {num_agents}")
+    num_agents = _parse_positive_int(num_agents_raw, "number of agents")
 
     if scan_mode not in _VALID_SCAN_MODES:
         raise ValueError(
@@ -80,10 +50,10 @@ def _parse_scenario(scenario: str):
         )
     collision_on = collision_mode == "collision"
 
-    controls = control_type.split("+")
+    controls = control_type_raw.split("+")
     if len(controls) != 2:
         raise ValueError(
-            f"Invalid control type: {control_type}, expected longitudinal+steering."
+            f"Invalid control type: {control_type_raw}, expected longitudinal+steering."
         )
     long_type, steer_type = controls
     if long_type not in _VALID_LONGITUDINAL_CONTROLS:
@@ -105,35 +75,12 @@ def _parse_scenario(scenario: str):
             f"must be from {sorted(_VALID_REWARDS)}."
         )
 
-    timestep_ratio = timestep_ratio_raw
-    if timestep_ratio == "v0":
-        timestep_ratio = 1
-    else:
-        try:
-            timestep_ratio = int(timestep_ratio)
-        except ValueError as exc:
-            raise ValueError(
-                f"Invalid timestep ratio: {timestep_ratio}, must be an integer."
-            ) from exc
-        if timestep_ratio <= 0:
-            raise ValueError(
-                f"Invalid timestep ratio: {timestep_ratio}, must be a positive integer."
-            )
+    timestep_ratio = _parse_positive_int(timestep_ratio_raw, "timestep ratio")
 
-    max_steps = max_steps_raw
-    if max_steps == "v0":
+    if max_steps_raw == "v0":
         max_steps = None
     else:
-        try:
-            max_steps = int(max_steps)
-        except ValueError as exc:
-            raise ValueError(
-                f"Invalid max steps: {max_steps}, must be an integer."
-            ) from exc
-        if max_steps <= 0:
-            raise ValueError(
-                f"Invalid max steps: {max_steps}, must be a positive integer."
-            )
+        max_steps = _parse_positive_int(max_steps_raw, "max steps")
 
     return (
         map_name,
@@ -145,6 +92,58 @@ def _parse_scenario(scenario: str):
         timestep_ratio,
         max_steps,
     )
+
+
+def _candidate_scenario_fields(scenario_parts: list[str]):
+    # Current canonical form:
+    # {map}_{num_agents}_{scan|noscan}_{collision|nocollision}_{rewards}_{controls}_{ratio}_{max_steps}_v0
+    if len(scenario_parts) >= 9:
+        yield (
+            "_".join(scenario_parts[:-8]),
+            *scenario_parts[-8:-2],
+            scenario_parts[-2],
+        )
+
+    # Current default-length shorthand:
+    # {map}_{num_agents}_{scan|noscan}_{collision|nocollision}_{rewards}_{controls}_{ratio}_v0
+    if len(scenario_parts) >= 8:
+        yield (
+            "_".join(scenario_parts[:-7]),
+            *scenario_parts[-7:-2],
+            scenario_parts[-2],
+            "v0",
+        )
+
+    # Legacy shorthand accepted for old PPO model filenames:
+    # {map}_{num_agents}_{scan|noscan}_{collision|nocollision}_{rewards}_{controls}_v0
+    if len(scenario_parts) >= 7:
+        yield (
+            "_".join(scenario_parts[:-6]),
+            *scenario_parts[-6:-1],
+            "1",
+            "v0",
+        )
+
+
+def _parse_scenario(scenario: str):
+    scenario_parts = scenario.split("_")
+    if len(scenario_parts) < 7:
+        raise ValueError(
+            "Environment ID must follow "
+            "{map}_{num_agents}_{scan|noscan}_{collision|nocollision}_{rewards}_"
+            "{longitudinal+steering}[_timestep_ratio][_max_steps]_v0."
+        )
+    if scenario_parts[-1] != "v0":
+        raise ValueError(f"Invalid environment version: {scenario_parts[-1]}.")
+
+    parse_errors = []
+    for candidate in _candidate_scenario_fields(scenario_parts):
+        try:
+            return _parse_scenario_fields(*candidate)
+        except ValueError as exc:
+            parse_errors.append(exc)
+
+    raise parse_errors[0]
 
 
 def make(env_id: str, **env_kwargs):

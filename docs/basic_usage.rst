@@ -115,5 +115,9 @@ The repository includes runnable examples:
 ``examples/render_dashboard.py``
     Small standalone rollout that writes an HTML dashboard.
 
+``examples/random_trackgen.py``
+    Random track generation utility that writes maps compatible with
+    ``Track.from_track_name``.
+
 ``examples/train_ppo_example.py`` and ``examples/eval_ppo_example.py``
     PPO training and evaluation entry points.

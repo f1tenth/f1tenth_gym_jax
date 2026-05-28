@@ -203,6 +203,20 @@ class TestExamples(unittest.TestCase):
                 for fragment in _BANNED_STALE_EXAMPLE_FRAGMENTS:
                     self.assertNotIn(fragment, source)
 
+    def test_readme_and_docs_list_tracked_python_examples(self):
+        repo_root = pathlib.Path(__file__).parent.parent
+        expected_examples = {
+            str(path.relative_to(repo_root))
+            for path in (repo_root / "examples").glob("*.py")
+        }
+        docs_text = (repo_root / "docs" / "basic_usage.rst").read_text()
+        readme_text = (repo_root / "README.md").read_text()
+
+        for example in sorted(expected_examples):
+            with self.subTest(example=example):
+                self.assertIn(example, docs_text)
+                self.assertIn(example, readme_text)
+
     def test_empty_track_example_runs_without_rendering(self):
         run_in_empty_track = _load_example_module("run_in_empty_track")
 

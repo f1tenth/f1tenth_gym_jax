@@ -74,6 +74,13 @@ To build a physical 1/10th scale vehicle, follow the guide here: https://f1tenth
 
   basic_usage
   customized_usage
+  visualization
+
+.. toctree::
+  :caption: MODEL REFERENCE
+  :maxdepth: 2
+
+  dynamics
 
 .. toctree::
   :caption: REPRODUCIBILITY
@@ -85,7 +92,4 @@ To build a physical 1/10th scale vehicle, follow the guide here: https://f1tenth
   :caption: API REFERENCE
   :maxdepth: 2
 
-  api/dynamic_models
-  api/collision_models
-  api/env
-  api/rendering
+  api/index

@@ -8,7 +8,6 @@ dist/
 docs/_build/
 docs/html/
 docs/xml/
-f1tenth_gym_jax_rollout.gif
 f1tenth_gym_jax_rollout.html
 htmlcov/
 maps/RandomTrack*/

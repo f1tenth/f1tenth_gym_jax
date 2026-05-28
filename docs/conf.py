@@ -51,10 +51,26 @@ version = release
 # ones.
 extensions = [
     "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
     "sphinx.ext.autosectionlabel",
+    "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
     "sphinx_rtd_theme",
 ]
+
+autosummary_generate = True
+autodoc_member_order = "bysource"
+autodoc_typehints = "description"
+autodoc_default_options = {
+    "members": True,
+    "undoc-members": True,
+    "show-inheritance": True,
+}
+autosectionlabel_prefix_document = True
+napoleon_numpy_docstring = True
+napoleon_google_docstring = True
+napoleon_use_param = True
+napoleon_use_rtype = True
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.

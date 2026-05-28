@@ -1,5 +1,5 @@
 Rendering Engine
-========================================
+================
 
 This module generates a self-contained browser dashboard for batched rollout
 stats, labeled rollout traces, and real-time trajectory playback.

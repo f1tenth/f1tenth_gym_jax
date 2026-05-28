@@ -25,6 +25,18 @@ Install optional dependencies for specific workflows:
     uv sync --extra docs      # Sphinx documentation build
     uv sync --extra cuda      # JAX CUDA 12 support
 
+Documentation
+-------------
+
+The documentation is built with Sphinx from the ``docs/`` directory. The
+repository also includes a root ``.readthedocs.yaml`` so Read the Docs can build
+the same Sphinx project with ``uv``.
+
+.. code:: bash
+
+    uv sync --extra docs
+    uv run sphinx-build -W -b html docs docs/_build/html
+
 Using pip
 ---------
 

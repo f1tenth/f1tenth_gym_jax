@@ -40,6 +40,22 @@ class TestMetadata(unittest.TestCase):
             )
         )
 
+    def test_readthedocs_uses_sphinx_with_uv_docs_extra(self):
+        repo_root = pathlib.Path(__file__).parent.parent
+        config = yaml.safe_load((repo_root / ".readthedocs.yaml").read_text())
+
+        self.assertEqual(config["version"], 2)
+        self.assertEqual(config["build"]["os"], "ubuntu-24.04")
+        self.assertIn("python", config["build"]["tools"])
+        self.assertEqual(config["sphinx"]["configuration"], "docs/conf.py")
+        self.assertTrue(config["sphinx"]["fail_on_warning"])
+
+        install = config["python"]["install"]
+        self.assertEqual(len(install), 1)
+        self.assertEqual(install[0]["method"], "uv")
+        self.assertEqual(install[0]["command"], "sync")
+        self.assertIn("docs", install[0]["extras"])
+
     def test_qt_rendering_dependencies_are_removed(self):
         repo_root = pathlib.Path(__file__).parent.parent
         metadata = tomllib.loads((repo_root / "pyproject.toml").read_text())
@@ -66,6 +82,7 @@ class TestMetadata(unittest.TestCase):
         }
 
         self.assertIn("COPY . /f1tenth_gym_jax", dockerfile)
+        self.assertNotIn("f1tenth_gym_jax_rollout.gif", patterns)
         for pattern in (
             ".git/",
             ".venv/",
@@ -79,3 +96,15 @@ class TestMetadata(unittest.TestCase):
         ):
             with self.subTest(pattern=pattern):
                 self.assertIn(pattern, patterns)
+
+    def test_generated_dashboard_artifact_is_ignored(self):
+        repo_root = pathlib.Path(__file__).parent.parent
+        gitignore = repo_root / ".gitignore"
+        patterns = {
+            line.strip()
+            for line in gitignore.read_text().splitlines()
+            if line.strip() and not line.startswith("#")
+        }
+
+        self.assertIn("f1tenth_gym_jax_rollout.html", patterns)
+        self.assertNotIn("f1tenth_gym_jax_rollout.gif", patterns)

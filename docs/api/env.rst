@@ -1,7 +1,7 @@
-JAX Environment
-===============
+F110 Environment
+================
 
-This is the top-level JAX environment.
+Top-level F1TENTH multi-agent JAX environment.
 
 .. automodule:: f1tenth_gym_jax.envs.f110_env
     :members:

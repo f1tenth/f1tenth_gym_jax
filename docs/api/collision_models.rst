@@ -1,7 +1,7 @@
 Collision Models
-========================================
+================
 
-This file contains JAX-compatible functions for collision checking between agents and maps.
+JAX-compatible functions for vehicle-vehicle and vehicle-map collision checks.
 
 .. automodule:: f1tenth_gym_jax.envs.collision_models
     :members:

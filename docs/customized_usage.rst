@@ -12,6 +12,13 @@ Environment IDs
 
     {map}_{num_agents}_{scan|noscan}_{collision|nocollision}_{rewards}_{longitudinal+steering}_{timestep_ratio}_{max_steps}_v0
 
+For the default episode length, use the shorthand form without the
+``max_steps`` field:
+
+.. code:: text
+
+    {map}_{num_agents}_{scan|noscan}_{collision|nocollision}_{rewards}_{longitudinal+steering}_{timestep_ratio}_v0
+
 For example:
 
 .. code:: python
@@ -20,6 +27,10 @@ For example:
 
     env = make(
         "Spielberg_2_scan_collision_progress+alive_velocity+steeringangle_10_500_v0"
+    )
+
+    default_length_env = make(
+        "Spielberg_1_scan_collision_progress+alive_velocity+steeringangle_10_v0"
     )
 
 Valid longitudinal controls are ``acceleration`` and ``velocity``. Valid

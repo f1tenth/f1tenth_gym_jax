@@ -10,32 +10,51 @@ _VALID_STEERING_CONTROLS = {"steeringangle", "steeringvelocity"}
 _VALID_REWARDS = {"time", "progress", "alive"}
 
 
-# scenario patterns
-# {map}_{num_agents}_{scan|noscan}_{collision|nocollision}_{rewards}_{longitudinal+steering}_{timestep_ratio}_{max_steps}_v0
 def _parse_scenario(scenario: str):
     scenario_parts = scenario.split("_")
-    if len(scenario_parts) < 9:
+    if len(scenario_parts) < 8:
         raise ValueError(
             "Environment ID must follow "
             "{map}_{num_agents}_{scan|noscan}_{collision|nocollision}_{rewards}_"
-            "{longitudinal+steering}_{timestep_ratio}_{max_steps}_v0."
+            "{longitudinal+steering}_{timestep_ratio}[_max_steps]_v0."
         )
     if scenario_parts[-1] != "v0":
         raise ValueError(f"Invalid environment version: {scenario_parts[-1]}.")
 
-    map_name = "_".join(scenario_parts[:-8])
+    if len(scenario_parts) >= 9:
+        try:
+            int(scenario_parts[-8])
+            has_explicit_max_steps = True
+        except ValueError:
+            has_explicit_max_steps = False
+    else:
+        has_explicit_max_steps = False
+
+    if has_explicit_max_steps:
+        map_name = "_".join(scenario_parts[:-8])
+        (
+            num_agents_raw,
+            scan_mode,
+            collision_mode,
+            reward_type,
+            control_type,
+            timestep_ratio_raw,
+            max_steps_raw,
+        ) = scenario_parts[-8:-1]
+    else:
+        map_name = "_".join(scenario_parts[:-7])
+        (
+            num_agents_raw,
+            scan_mode,
+            collision_mode,
+            reward_type,
+            control_type,
+            timestep_ratio_raw,
+        ) = scenario_parts[-7:-1]
+        max_steps_raw = "v0"
+
     if not map_name:
         raise ValueError("Environment ID is missing a map name.")
-
-    (
-        num_agents_raw,
-        scan_mode,
-        collision_mode,
-        reward_type,
-        control_type,
-        timestep_ratio_raw,
-        max_steps_raw,
-    ) = scenario_parts[-8:-1]
 
     try:
         num_agents = int(num_agents_raw)

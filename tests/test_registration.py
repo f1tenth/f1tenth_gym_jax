@@ -24,10 +24,49 @@ class TestRegistration(unittest.TestCase):
             ),
         )
 
+    def test_parse_scenario_with_default_length_shorthand(self):
+        scenario = (
+            "Spielberg_1_scan_collision_progress+alive_" "velocity+steeringangle_10_v0"
+        )
+
+        self.assertEqual(
+            _parse_scenario(scenario),
+            (
+                "Spielberg",
+                1,
+                True,
+                True,
+                "progress+alive",
+                ["velocity", "steeringangle"],
+                10,
+                None,
+            ),
+        )
+
     def test_parse_scenario_with_underscored_map_name(self):
         scenario = (
             "Spielberg_blank_1_noscan_nocollision_progress_"
             "acceleration+steeringvelocity_1_v0_v0"
+        )
+
+        self.assertEqual(
+            _parse_scenario(scenario),
+            (
+                "Spielberg_blank",
+                1,
+                False,
+                False,
+                "progress",
+                ["acceleration", "steeringvelocity"],
+                1,
+                None,
+            ),
+        )
+
+    def test_parse_shorthand_scenario_with_underscored_map_name(self):
+        scenario = (
+            "Spielberg_blank_1_noscan_nocollision_progress_"
+            "acceleration+steeringvelocity_1_v0"
         )
 
         self.assertEqual(
@@ -65,7 +104,7 @@ class TestRegistration(unittest.TestCase):
 
     def test_make_uses_param_timestep_for_default_max_steps(self):
         env = make(
-            "Spielberg_1_noscan_nocollision_progress_acceleration+steeringvelocity_10_v0_v0"
+            "Spielberg_1_noscan_nocollision_progress_acceleration+steeringvelocity_10_v0"
         )
 
         self.assertEqual(

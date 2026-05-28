@@ -60,13 +60,21 @@ Environment IDs use this pattern:
 {map}_{num_agents}_{scan|noscan}_{collision|nocollision}_{rewards}_{longitudinal+steering}_{timestep_ratio}_{max_steps}_v0
 ```
 
-Example:
+For the default episode length, use the shorthand form without the
+`max_steps` field:
+
+```text
+{map}_{num_agents}_{scan|noscan}_{collision|nocollision}_{rewards}_{longitudinal+steering}_{timestep_ratio}_v0
+```
+
+Examples:
 
 ```text
 Spielberg_1_scan_collision_progress+alive_velocity+steeringangle_10_v0
+Spielberg_1_scan_collision_progress+alive_velocity+steeringangle_10_500_v0
 ```
 
-Use `v0` in the `max_steps` slot to request the default episode length.
+The final `v0` is the environment ID version.
 
 ## Docker
 

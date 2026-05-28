@@ -27,6 +27,19 @@ class TestMetadata(unittest.TestCase):
         self.assertIn("--extra examples", install_step["run"])
         self.assertIn("--extra rl", install_step["run"])
 
+    def test_dev_dependencies_enable_notebook_formatting(self):
+        pyproject = pathlib.Path(__file__).parent.parent / "pyproject.toml"
+        dev_dependencies = tomllib.loads(pyproject.read_text())["dependency-groups"][
+            "dev"
+        ]
+
+        self.assertTrue(
+            any(
+                dependency.startswith("black[jupyter]")
+                for dependency in dev_dependencies
+            )
+        )
+
     def test_docker_context_excludes_local_artifacts(self):
         repo_root = pathlib.Path(__file__).parent.parent
         dockerfile = (repo_root / "Dockerfile").read_text()

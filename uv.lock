@@ -127,6 +127,13 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/7b/14/4da7b12a9abc43a601c215cb5a3d176734578da109f0dbf0a832ed78be09/black-23.12.1-py3-none-any.whl", hash = "sha256:78baad24af0f033958cad29731e27363183e140962595def56423e626f4bee3e", size = 194363, upload-time = "2023-12-22T23:06:14.278Z" },
 ]
 
+[package.optional-dependencies]
+jupyter = [
+    { name = "ipython", version = "8.37.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "ipython", version = "9.6.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "tokenize-rt" },
+]
+
 [[package]]
 name = "certifi"
 version = "2025.8.3"
@@ -636,7 +643,7 @@ rl = [
 [package.dev-dependencies]
 dev = [
     { name = "autoflake" },
-    { name = "black" },
+    { name = "black", extra = ["jupyter"] },
     { name = "flake8" },
     { name = "ipykernel" },
     { name = "isort" },
@@ -674,7 +681,7 @@ provides-extras = ["cuda", "rl", "examples", "docs"]
 [package.metadata.requires-dev]
 dev = [
     { name = "autoflake", specifier = ">=2.2.1,<3" },
-    { name = "black", specifier = ">=23.12.1,<24" },
+    { name = "black", extras = ["jupyter"], specifier = ">=23.12.1,<24" },
     { name = "flake8", specifier = ">=7.0.0,<8" },
     { name = "ipykernel", specifier = ">=6.29.0,<7" },
     { name = "isort", specifier = ">=5.13.2,<6" },
@@ -3151,6 +3158,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/43/c9/36611dcb2e5007d1b7405f44068d1c2839f6233fc0c4bdead56a8ec24c31/tensorstore-0.1.77-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:351f0f73ed2b57a561b0ffd32ab9188d65adc0a85916b23f8355a5df50dbac2e", size = 17701404, upload-time = "2025-09-20T00:18:54.929Z" },
     { url = "https://files.pythonhosted.org/packages/c1/42/598560fe23d04c0ae160b8f9754c3887893e401305fd50dd7d70e08c4b0b/tensorstore-0.1.77-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:ed487f313af8e07cc3caa372120621f4029778f9e5a1c026efb915dabea555a2", size = 19537201, upload-time = "2025-09-20T00:18:57.504Z" },
     { url = "https://files.pythonhosted.org/packages/22/5d/bf02faa525ed54b37d1f6d4a1463e9986014ccf26da3cef77fe1efb8c18b/tensorstore-0.1.77-cp313-cp313-win_amd64.whl", hash = "sha256:416a5f076260e852afeaf7d30e567b08a28dd3af913d38a27f112f599e53313a", size = 12710186, upload-time = "2025-09-20T00:19:00.199Z" },
+]
+
+[[package]]
+name = "tokenize-rt"
+version = "6.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/69/ed/8f07e893132d5051d86a553e749d5c89b2a4776eb3a579b72ed61f8559ca/tokenize_rt-6.2.0.tar.gz", hash = "sha256:8439c042b330c553fdbe1758e4a05c0ed460dbbbb24a606f11f0dee75da4cad6", size = 5476, upload-time = "2025-05-23T23:48:00.035Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/33/f0/3fe8c6e69135a845f4106f2ff8b6805638d4e85c264e70114e8126689587/tokenize_rt-6.2.0-py2.py3-none-any.whl", hash = "sha256:a152bf4f249c847a66497a4a95f63376ed68ac6abf092a2f7cfb29d044ecff44", size = 6004, upload-time = "2025-05-23T23:47:58.812Z" },
 ]
 
 [[package]]

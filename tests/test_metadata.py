@@ -79,7 +79,9 @@ class TestMetadata(unittest.TestCase):
                 self.assertIn("--extra examples", command)
                 self.assertIn("--extra rl", command)
 
-        self.assertIn("--extra docs", install_command("docs"))
+        docs_command = install_command("docs")
+        self.assertIn("--extra docs", docs_command)
+        self.assertNotIn("--dev", docs_command)
 
     def test_ci_package_job_checks_all_tracked_map_files(self):
         workflow_path = (

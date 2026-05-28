@@ -52,6 +52,8 @@ class TrajRenderer:
         self.canvas = None
         self.current_step = 0
         self.current_traj = 0
+        self.chassis = []
+        self.wheels = []
 
         self.render_fps = render_fps
 
@@ -107,11 +109,11 @@ class TrajRenderer:
         # trajectory selector
         self.traj_selector = pg.SpinBox(
             value=0,
-            bounds=[0, self.num_trajectories],
+            bounds=[0, self.num_trajectories - 1],
             int=True,
             minStep=1,
             step=1,
-            wrapping=True,
+            wrapping=False,
         )
         self.traj_selector.setFixedSize(100, 20)
         self.traj_selector.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
@@ -239,6 +241,101 @@ class TrajRenderer:
         """
         self.callbacks.append(callback_fn)
 
+    def _clear_vehicle_items(self) -> None:
+        for item in self.chassis:
+            self.canvas.removeItem(item)
+        for wheel_pair in self.wheels:
+            for item in wheel_pair:
+                self.canvas.removeItem(item)
+        self.chassis = []
+        self.wheels = []
+
+    def _vehicle_vertices(
+        self, agent_index: int
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        pose = self.traj[self.current_step, self.current_traj, agent_index, [0, 1, 4]]
+        steering = self.traj[self.current_step, self.current_traj, agent_index, 2]
+        vertices = get_vertices(
+            pose,
+            self.env.params.length,
+            self.env.params.width,
+        )
+        vertices = vertices[[0, 3, 2, 1], :]
+        vertices = np.vstack([vertices, vertices[0]])
+
+        fl_vertices = _get_tire_vertices(
+            pose,
+            self.env.params.length,
+            self.env.params.width,
+            self.wheel_width,
+            self.wheel_length,
+            True,
+            steering,
+        )
+        fr_vertices = _get_tire_vertices(
+            pose,
+            self.env.params.length,
+            self.env.params.width,
+            self.wheel_width,
+            self.wheel_length,
+            False,
+            steering,
+        )
+        return np.asarray(vertices), np.asarray(fl_vertices), np.asarray(fr_vertices)
+
+    def _initialize_vehicle_items(self) -> None:
+        self._clear_vehicle_items()
+        for agent_index in range(self.num_agents):
+            vertices, fl_vertices, fr_vertices = self._vehicle_vertices(agent_index)
+            self.chassis.append(
+                self.canvas.getPlotItem().plot(
+                    vertices[:, 0],
+                    vertices[:, 1],
+                    pen=pg.mkPen(color=(0, 0, 0), width=self.thickness),
+                    fillLevel=0,
+                    brush=self.car_colors[agent_index],
+                ),
+            )
+            fl_wheel = self.canvas.getPlotItem().plot(
+                fl_vertices[:, 0],
+                fl_vertices[:, 1],
+                pen=pg.mkPen(color=(0, 0, 0), width=self.thickness),
+                fillLevel=0,
+                brush=(0, 0, 0),
+            )
+            fr_wheel = self.canvas.getPlotItem().plot(
+                fr_vertices[:, 0],
+                fr_vertices[:, 1],
+                pen=pg.mkPen(color=(0, 0, 0), width=self.thickness),
+                fillLevel=0,
+                brush=(0, 0, 0),
+            )
+            self.wheels.append([fl_wheel, fr_wheel])
+
+    def _update_vehicle_items(self) -> None:
+        for agent_index in range(self.num_agents):
+            vertices, fl_vertices, fr_vertices = self._vehicle_vertices(agent_index)
+            self.chassis[agent_index].setData(vertices[:, 0], vertices[:, 1])
+            self.wheels[agent_index][0].setData(fl_vertices[:, 0], fl_vertices[:, 1])
+            self.wheels[agent_index][1].setData(fr_vertices[:, 0], fr_vertices[:, 1])
+        for callback in self.callbacks:
+            callback(self)
+
+    def _update_focus(self) -> None:
+        focus = self.focus_selector.currentText()
+        if focus == "Map":
+            self.canvas.getPlotItem().autoRange()
+            self.focus_on = "Map"
+        else:
+            self.focus_on = self.env.agents.index(focus)
+            ego_x = self.traj[self.current_step, self.current_traj, self.focus_on, 0]
+            ego_y = self.traj[self.current_step, self.current_traj, self.focus_on, 1]
+            try:
+                self.canvas.getPlotItem().setXRange(ego_x - 10, ego_x + 10)
+                self.canvas.getPlotItem().setYRange(ego_y - 10, ego_y + 10)
+            except ValueError:
+                pass
+
     def play_pause(self):
         """Toggle play/pause"""
         self.playing = not self.playing
@@ -276,52 +373,8 @@ class TrajRenderer:
         )
         self.sim_time += 1.0 / self.render_fps
 
-        # update focus
-        focus = self.focus_selector.currentText()
-        if focus == "Map":
-            self.canvas.getPlotItem().autoRange()
-            self.focus_on = "Map"
-        else:
-            self.focus_on = self.env.agents.index(focus)
-            ego_x = self.traj[self.current_step, self.current_traj, self.focus_on, 0]
-            ego_y = self.traj[self.current_step, self.current_traj, self.focus_on, 1]
-            try:
-                self.canvas.getPlotItem().setXRange(ego_x - 10, ego_x + 10)
-                self.canvas.getPlotItem().setYRange(ego_y - 10, ego_y + 10)
-            except ValueError:
-                pass
-
-        # update car vertices
-        for i in range(self.num_agents):
-            vertices = get_vertices(
-                self.traj[self.current_step, self.current_traj, i, [0, 1, 4]],
-                self.env.params.length,
-                self.env.params.width,
-            )
-            vertices = vertices[[0, 3, 2, 1], :]
-            vertices = np.vstack([vertices, vertices[0]])
-            self.chassis[i].setData(vertices[:, 0], vertices[:, 1])
-
-            fl_vertices = _get_tire_vertices(
-                self.traj[self.current_step, self.current_traj, i, [0, 1, 4]],
-                self.env.params.length,
-                self.env.params.width,
-                self.wheel_width,
-                self.wheel_length,
-                True,
-                self.traj[self.current_step, self.current_traj, i, 2],
-            )
-            self.wheels[i][0].setData(fl_vertices[:, 0], fl_vertices[:, 1])
-            fr_vertices = _get_tire_vertices(
-                self.traj[self.current_step, self.current_traj, i, [0, 1, 4]],
-                self.env.params.length,
-                self.env.params.width,
-                self.wheel_width,
-                self.wheel_length,
-                False,
-                self.traj[self.current_step, self.current_traj, i, 2],
-            )
-            self.wheels[i][1].setData(fr_vertices[:, 0], fr_vertices[:, 1])
+        self._update_focus()
+        self._update_vehicle_items()
 
     def render(self, trajectory: np.ndarray) -> Optional[np.ndarray]:
         """
@@ -332,73 +385,36 @@ class TrajRenderer:
         Optional[np.ndarray]
             if render_mode is "rgb_array", returns the rendered frame as an array
         """
-        # get sizes
+        if trajectory.ndim != 4:
+            raise ValueError(
+                "Expected trajectory shape (num_steps, num_envs, num_agents, num_states)."
+            )
+
         (
             self.num_steps,
             self.num_envs,
             self.num_agents,
             self.num_states,
         ) = trajectory.shape
+        if self.num_steps == 0 or self.num_envs == 0:
+            raise ValueError("Trajectory must contain at least one step and one env.")
+        if self.num_agents != self.env.num_agents:
+            raise ValueError(
+                f"Trajectory has {self.num_agents} agents, but env has {self.env.num_agents}."
+            )
+
+        if self.render_mode == "rgb_array" and self.current_step >= self.num_steps:
+            return None
+
         self.traj_initialized = True
         self.traj = trajectory
-        self.traj_selector.setMaximum(self.num_envs)
+        self.current_traj = min(self.current_traj, self.num_envs - 1)
+        self.traj_selector.setMaximum(self.num_envs - 1)
 
-        # initialize the render for the cars
-        self.chassis = []
-        self.wheels = []
-        for i in range(self.num_agents):
-            vertices = get_vertices(
-                self.traj[self.current_step, self.current_traj, i, [0, 1, 4]],
-                self.env.params.length,
-                self.env.params.width,
-            )
-            vertices = vertices[[0, 3, 2, 1], :]
-            vertices = np.vstack([vertices, vertices[0]])  # close the loop
-            self.chassis.append(
-                self.canvas.getPlotItem().plot(
-                    vertices[:, 0],
-                    vertices[:, 1],
-                    pen=pg.mkPen(color=(0, 0, 0), width=self.thickness),
-                    fillLevel=0,
-                    brush=self.car_colors[i],
-                ),
-            )
-
-            fl_vertices = _get_tire_vertices(
-                self.traj[self.current_step, self.current_traj, i, [0, 1, 4]],
-                self.env.params.length,
-                self.env.params.width,
-                self.wheel_width,
-                self.wheel_length,
-                True,
-                self.traj[self.current_step, self.current_traj, i, 2],
-            )
-            fl_wheel = self.canvas.getPlotItem().plot(
-                fl_vertices[:, 0],
-                fl_vertices[:, 1],
-                pen=pg.mkPen(color=(0, 0, 0), width=self.thickness),
-                fillLevel=0,
-                brush=(0, 0, 0),
-            )
-            fr_vertices = _get_tire_vertices(
-                self.traj[self.current_step, self.current_traj, i, [0, 1, 4]],
-                self.env.params.length,
-                self.env.params.width,
-                self.wheel_width,
-                self.wheel_length,
-                False,
-                self.traj[self.current_step, self.current_traj, i, 2],
-            )
-            fr_wheel = self.canvas.getPlotItem().plot(
-                fr_vertices[:, 0],
-                fr_vertices[:, 1],
-                pen=pg.mkPen(color=(0, 0, 0), width=self.thickness),
-                fillLevel=0,
-                brush=(0, 0, 0),
-            )
-
-            wheels = [fl_wheel, fr_wheel]
-            self.wheels.append(wheels)
+        if not self.chassis:
+            self._initialize_vehicle_items()
+        else:
+            self._update_vehicle_items()
 
         # call render start
         if self.render_mode in ["human", "human_fast"]:
@@ -415,12 +431,8 @@ class TrajRenderer:
             ptr.setsize(height * width * 4)
             frame = np.array(ptr).reshape(height, width, 4)  # Copies the data
 
-            # advance frame counter
-            if self.current_step >= self.num_steps:
-                return None
-            else:
-                self.current_step += 1
-                return frame[:, :, :3]  # remove alpha channel
+            self.current_step += 1
+            return frame[:, :, :3]  # remove alpha channel
 
     def render_points(
         self,

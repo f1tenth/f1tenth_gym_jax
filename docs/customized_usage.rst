@@ -37,6 +37,12 @@ Valid longitudinal controls are ``acceleration`` and ``velocity``. Valid
 steering controls are ``steeringvelocity`` and ``steeringangle``. Rewards can be
 combined with ``+`` from ``time``, ``progress``, and ``alive``.
 
+The environment ID names controls as ``longitudinal+steering`` for readability,
+but action vectors are ordered as ``[steering_command, longitudinal_command]``.
+For example, an ``acceleration+steeringvelocity`` environment expects
+``[steering_velocity, acceleration]``. Use ``env.action_space(agent)`` to inspect
+the exact bounds for each action component.
+
 Older model filenames that omit ``timestep_ratio`` are still accepted for
 compatibility and use ``timestep_ratio=1``.
 

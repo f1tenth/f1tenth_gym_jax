@@ -44,7 +44,7 @@ env = make("Spielberg_1_noscan_nocollision_progress_acceleration+steeringvelocit
 key = jax.random.key(0)
 obs, state = env.reset(key)
 
-actions = {"agent_0": jnp.array([0.0, 1.0])}
+actions = {"agent_0": jnp.array([0.0, 1.0])}  # [steering_velocity, acceleration]
 key, step_key = jax.random.split(key)
 obs, state, rewards, dones, infos = env.step(step_key, state, actions)
 ```
@@ -81,6 +81,10 @@ Spielberg_1_scan_collision_progress+alive_velocity+steeringangle_10_500_v0
 The final `v0` is the environment ID version.
 Older model filenames that omit `timestep_ratio` are still accepted and use
 `timestep_ratio=1`.
+
+Action vectors are ordered as `[steering_command, longitudinal_command]`.
+For example, `acceleration+steeringvelocity` environments expect
+`[steering_velocity, acceleration]`.
 
 Bundled maps are loaded from the installed package. Downloaded maps are cached
 under `$XDG_CACHE_HOME/f1tenth_gym_jax/maps` by default; set

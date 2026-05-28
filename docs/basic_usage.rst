@@ -21,13 +21,16 @@ and per-agent action dictionaries.
     key = jax.random.key(0)
     obs, state = env.reset(key)
 
-    actions = {"agent_0": jnp.array([0.0, 1.0])}
+    actions = {"agent_0": jnp.array([0.0, 1.0])}  # [steering_velocity, acceleration]
     key, step_key = jax.random.split(key)
     obs, state, rewards, dones, infos = env.step(step_key, state, actions)
 
 ``reset`` returns an observation dictionary and a JAX state object. ``step``
 returns observations, the next state, per-agent rewards, per-agent done flags
 plus ``"__all__"``, and an info dictionary.
+
+Action vectors are ordered as ``[steering_command, longitudinal_command]``.
+For the environment above, that means ``[steering_velocity, acceleration]``.
 
 For full examples, see ``examples/waypoint_follow.py``,
 ``examples/train_ppo_example.py``, and ``examples/eval_ppo_example.py``.

@@ -59,11 +59,16 @@ def _validate_ordered_bounds(name: str, lower: float, upper: float) -> None:
 
 class F110Env(MultiAgentEnv):
     """
-    JAX compatible gym environment for F1TENTH
+    JAX-compatible multi-agent environment for F1TENTH.
 
-    Args:
-        num_agents (int, default=1): number of agents in the environment.
-        params (Param): vehicle, map, reward, and simulation parameters.
+    Parameters
+    ----------
+    num_agents : int, default=1
+        Number of agents in the environment.
+    params : Param, default=Param()
+        Vehicle, map, reward, control, and simulation parameters.
+    **kwargs
+        Accepted for compatibility with older construction code.
 
     """
 

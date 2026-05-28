@@ -14,14 +14,21 @@ import jax.numpy as jnp
 @jax.jit
 def sa(normal: chex.Array, vertices1: chex.Array, vertices2: chex.Array) -> bool:
     """
-    See if two bodies' projections overlap along a normal axis
+    Check whether two body projections are separated along a normal axis.
 
-    Args:
-        vertices1 (jax.numpy.ndarray, (n, 2)): vertices of the first body
-        vertices2 (jax.numpy.ndarray, (n, 2)): vertices of the second body
+    Parameters
+    ----------
+    normal : chex.Array
+        Axis normal used for the projection.
+    vertices1 : chex.Array, shape (n, 2)
+        Vertices of the first body.
+    vertices2 : chex.Array, shape (n, 2)
+        Vertices of the second body.
 
-    Returns:
-        overlap (boolean): True if two projections overlap
+    Returns
+    -------
+    bool
+        True when this axis separates the two projected bodies.
     """
 
     # project vertices of both bodies onto the axis
@@ -37,14 +44,18 @@ def sa(normal: chex.Array, vertices1: chex.Array, vertices2: chex.Array) -> bool
 @jax.jit
 def collision(vertices: chex.Array) -> bool:
     """
-    SAT test to see whether two bodies overlap
+    Check whether two rectangular bodies overlap with SAT.
 
-    Args:
-        vertices1 (jax.numpy.ndarray, (n, 2)): vertices of the first body
-        vertices2 (jax.numpy.ndarray, (n, 2)): vertices of the second body
+    Parameters
+    ----------
+    vertices : chex.Array, shape (4, 4)
+        Concatenated vertices for two rectangular bodies. Columns ``0:2`` are
+        the first body and columns ``2:4`` are the second body.
 
-    Returns:
-        overlap (boolean): True if two bodies collide
+    Returns
+    -------
+    bool
+        True if the bodies collide.
     """
     vertices1 = vertices[:, :2]
     vertices2 = vertices[:, 2:]
@@ -69,14 +80,19 @@ def collision(vertices: chex.Array) -> bool:
 @jax.jit
 def collision_map(vertices, pixel_centers):
     """
-    Check vertices collision with map occupancy
-    Rasters car polygon to map occupancy
-    vmap across number of cars, and number of occupied pixels
-    Args:
-        vertices (np.ndarray (num_bodies, 4, 2)): agent rectangle vertices, ccw winding order
-        pixel_centers (np.ndarray (HxW, 2)): x, y position of pixel centers of map image
-    Returns:
-        collisions (np.ndarray (num_bodies, )): whether each body is in collision with map
+    Check vehicle polygons against occupied map pixels.
+
+    Parameters
+    ----------
+    vertices : chex.Array, shape (num_bodies, 4, 2)
+        Agent rectangle vertices in counter-clockwise winding order.
+    pixel_centers : chex.Array, shape (num_pixels, 2)
+        ``x`` and ``y`` positions of occupied map pixel centers.
+
+    Returns
+    -------
+    chex.Array, shape (num_bodies,)
+        Boolean collision flag for each body.
     """
     edges = jnp.roll(vertices, -1, axis=1) - vertices
     point_vecs = pixel_centers[:, None, None, :] - vertices[None, :, :, :]
@@ -95,13 +111,17 @@ Utility functions for getting vertices by pose and shape
 @jax.jit
 def get_trmtx(pose):
     """
-    Get transformation matrix of vehicle frame -> global frame
+    Compute the transform from vehicle frame to global frame.
 
-    Args:
-        pose (np.ndarray (3, )): current pose of the vehicle
+    Parameters
+    ----------
+    pose : chex.Array, shape (3,)
+        Vehicle pose ``[x, y, yaw]`` in world coordinates.
 
-    return:
-        H (np.ndarray (4, 4)): transformation matrix
+    Returns
+    -------
+    chex.Array, shape (4, 4)
+        Homogeneous transformation matrix.
     """
     x = pose[0]
     y = pose[1]
@@ -122,15 +142,21 @@ def get_trmtx(pose):
 @jax.jit
 def get_vertices(pose, length, width):
     """
-    Utility function to return vertices of the car body given pose and size
+    Compute vehicle rectangle vertices from pose and body size.
 
-    Args:
-        pose (np.ndarray, (3, )): current world coordinate pose of the vehicle
-        length (float): car length
-        width (float): car width
+    Parameters
+    ----------
+    pose : chex.Array, shape (3,)
+        Vehicle pose ``[x, y, yaw]`` in world coordinates.
+    length : float
+        Vehicle body length.
+    width : float
+        Vehicle body width.
 
-    Returns:
-        vertices (np.ndarray, (4, 2)): corner vertices of the vehicle body
+    Returns
+    -------
+    chex.Array, shape (4, 2)
+        Corner vertices of the vehicle body.
     """
     H = get_trmtx(pose)
     rl = H.dot(jnp.asarray([[-length / 2], [width / 2], [0.0], [1.0]])).flatten()

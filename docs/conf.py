@@ -68,7 +68,7 @@ autodoc_default_options = {
 }
 autosectionlabel_prefix_document = True
 napoleon_numpy_docstring = True
-napoleon_google_docstring = True
+napoleon_google_docstring = False
 napoleon_use_param = True
 napoleon_use_rtype = True
 

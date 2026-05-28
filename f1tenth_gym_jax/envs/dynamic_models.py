@@ -20,15 +20,21 @@ from .utils import Param
 @partial(jax.jit, static_argnums=[1, 2])
 def upper_accel_limit(vel, a_max, v_switch):
     """
-    Upper acceleration limit, adjusts the acceleration based on constraints
+    Compute the positive longitudinal acceleration limit.
 
-        Args:
-            vel (float): current velocity of the vehicle
-            a_max (float): maximum allowed acceleration, symmetrical
-            v_switch (float): switching velocity (velocity at which the acceleration is no longer able to create wheel spin)
+    Parameters
+    ----------
+    vel : float
+        Current vehicle speed.
+    a_max : float
+        Maximum allowed acceleration magnitude.
+    v_switch : float
+        Speed above which the acceleration limit decays to avoid wheel slip.
 
-        Returns:
-            positive_accel_limit (float): adjusted acceleration
+    Returns
+    -------
+    float
+        Positive acceleration limit at the current speed.
     """
     # if vel > v_switch:
     #     pos_limit = a_max * (v_switch / vel)
@@ -41,18 +47,27 @@ def upper_accel_limit(vel, a_max, v_switch):
 @partial(jax.jit, static_argnums=[2, 3, 4, 5])
 def accl_constraints(vel, a_long_d, v_switch, a_max, v_min, v_max):
     """
-    Acceleration constraints, adjusts the acceleration based on constraints
+    Apply velocity and acceleration bounds to desired acceleration.
 
-        Args:
-            vel (float): current velocity of the vehicle
-            a_long_d (float): unconstrained desired acceleration in the direction of travel.
-            v_switch (float): switching velocity (velocity at which the acceleration is no longer able to create wheel spin)
-            a_max (float): maximum allowed acceleration, symmetrical
-            v_min (float): minimum allowed velocity
-            v_max (float): maximum allowed velocity
+    Parameters
+    ----------
+    vel : float
+        Current vehicle speed.
+    a_long_d : float
+        Unconstrained desired longitudinal acceleration.
+    v_switch : float
+        Speed above which the positive acceleration limit decays.
+    a_max : float
+        Maximum acceleration magnitude.
+    v_min : float
+        Minimum allowed velocity.
+    v_max : float
+        Maximum allowed velocity.
 
-        Returns:
-            accl (float): adjusted acceleration
+    Returns
+    -------
+    float
+        Bounded longitudinal acceleration.
     """
 
     uac = upper_accel_limit(vel, a_max, v_switch)
@@ -87,18 +102,27 @@ def steering_constraint(
     steering_angle, steering_velocity, s_min, s_max, sv_min, sv_max
 ):
     """
-    Steering constraints, adjusts the steering velocity based on constraints
+    Apply steering angle and steering-rate bounds.
 
-        Args:
-            steering_angle (float): current steering_angle of the vehicle
-            steering_velocity (float): unconstraint desired steering_velocity
-            s_min (float): minimum steering angle
-            s_max (float): maximum steering angle
-            sv_min (float): minimum steering velocity
-            sv_max (float): maximum steering velocity
+    Parameters
+    ----------
+    steering_angle : float
+        Current front-wheel steering angle.
+    steering_velocity : float
+        Unconstrained desired steering velocity.
+    s_min : float
+        Minimum steering angle.
+    s_max : float
+        Maximum steering angle.
+    sv_min : float
+        Minimum steering velocity.
+    sv_max : float
+        Maximum steering velocity.
 
-        Returns:
-            steering_velocity (float): adjusted steering velocity
+    Returns
+    -------
+    float
+        Bounded steering velocity.
     """
 
     # constraint steering velocity
@@ -129,38 +153,25 @@ def steering_constraint(
 @partial(jax.jit, static_argnums=[1])
 def vehicle_dynamics_ks(x_and_u: chex.Array, params: Param) -> chex.Array:
     """
-    Single Track Kinematic Vehicle Dynamics.
-    Follows https://gitlab.lrz.de/tum-cps/commonroad-vehicle-models/-/blob/master/vehicleModels_commonRoad.pdf, section 5
+    Evaluate the kinematic single-track model.
 
-        Args:
-            x_and_u (jax.numpy.ndarray (7, )): vehicle state vector with control input vector (x0, x1, x2, x3, x4, u0, u1)
-                x0: x position in global coordinates
-                x1: y position in global coordinates
-                x2: steering angle of front wheels
-                x3: velocity in x direction
-                x4: yaw angle
-                u0: steering angle velocity of front wheels
-                u1: longitudinal acceleration
-            params (Param): jittable dataclass with the following fields:
-                mu (float): friction coefficient
-                C_Sf (float): cornering stiffness of front wheels
-                C_Sr (float): cornering stiffness of rear wheels
-                lf (float): distance from center of gravity to front axle
-                lr (float): distance from center of gravity to rear axle
-                h (float): height of center of gravity
-                m (float): mass of vehicle
-                I (float): moment of inertia of vehicle, about Z axis
-                s_min (float): minimum steering angle
-                s_max (float): maximum steering angle
-                sv_min (float): minimum steering velocity
-                sv_max (float): maximum steering velocity
-                v_switch (float): velocity above which the acceleration is no longer able to create wheel slip
-                a_max (float): maximum allowed acceleration
-                v_min (float): minimum allowed velocity
-                v_max (float): maximum allowed velocity
+    The implementation follows section 5 of the CommonRoad vehicle models
+    reference.
 
-        Returns:
-            f (jax.numpy.ndarray (7, )): right hand side of differential equations
+    Parameters
+    ----------
+    x_and_u : chex.Array, shape (7,)
+        State and control vector
+        ``[x, y, delta, v, psi, steering_command, longitudinal_command]``.
+    params : Param
+        Jittable simulation parameters, including geometry, control limits,
+        action modes, and timestep.
+
+    Returns
+    -------
+    chex.Array, shape (7,)
+        Right-hand side of the kinematic differential equations with two dummy
+        control dimensions appended.
     """
     # Controls
     DELTA = x_and_u[2]
@@ -206,38 +217,26 @@ def vehicle_dynamics_ks(x_and_u: chex.Array, params: Param) -> chex.Array:
 @partial(jax.jit, static_argnums=[1])
 def vehicle_dynamics_st_switching(x_and_u: chex.Array, params: Param) -> chex.Array:
     """
-    Single Track Vehicle Dynamics.
-    From https://gitlab.lrz.de/tum-cps/commonroad-vehicle-models/-/blob/master/vehicleModels_commonRoad.pdf, section 7
+    Evaluate the switching dynamic single-track model.
 
-        Args:
-            x_and_u (jax.numpy.ndarray (7, )): vehicle state vector with control input vector (x0, x1, x2, x3, x4, u0, u1)
-                x0: x position in global coordinates
-                x1: y position in global coordinates
-                x2: steering angle of front wheels
-                x3: velocity in x direction
-                x4: yaw angle
-                u0: steering angle velocity of front wheels
-                u1: longitudinal acceleration
-            params (Param): jittable dataclass with the following fields:
-                mu (float): friction coefficient
-                C_Sf (float): cornering stiffness of front wheels
-                C_Sr (float): cornering stiffness of rear wheels
-                lf (float): distance from center of gravity to front axle
-                lr (float): distance from center of gravity to rear axle
-                h (float): height of center of gravity
-                m (float): mass of vehicle
-                I (float): moment of inertia of vehicle, about Z axis
-                s_min (float): minimum steering angle
-                s_max (float): maximum steering angle
-                sv_min (float): minimum steering velocity
-                sv_max (float): maximum steering velocity
-                v_switch (float): velocity above which the acceleration is no longer able to create wheel slip
-                a_max (float): maximum allowed acceleration
-                v_min (float): minimum allowed velocity
-                v_max (float): maximum allowed velocity
+    The implementation follows section 7 of the CommonRoad vehicle models
+    reference and switches to a kinematic branch at low speed.
 
-        Returns:
-            f (jax.numpy.ndarray (7, )): right hand side of differential equations
+    Parameters
+    ----------
+    x_and_u : chex.Array, shape (9,)
+        State and control vector
+        ``[x, y, delta, v, psi, psi_dot, beta, steering_command,
+        longitudinal_command]``.
+    params : Param
+        Jittable simulation parameters, including geometry, tire coefficients,
+        control limits, action modes, and timestep.
+
+    Returns
+    -------
+    chex.Array, shape (9,)
+        Right-hand side of the single-track differential equations with two
+        dummy control dimensions appended.
     """
     # States
     DELTA = x_and_u[2]
@@ -354,38 +353,26 @@ def vehicle_dynamics_st_switching(x_and_u: chex.Array, params: Param) -> chex.Ar
 @partial(jax.jit, static_argnums=[1])
 def vehicle_dynamics_st_smooth(x_and_u: chex.Array, params: Param) -> chex.Array:
     """
-    Single Track Vehicle Dynamics.
-    From https://gitlab.lrz.de/tum-cps/commonroad-vehicle-models/-/blob/master/vehicleModels_commonRoad.pdf, section 7
+    Evaluate the smoothly blended dynamic single-track model.
 
-        Args:
-            x_and_u (jax.numpy.ndarray (7, )): vehicle state vector with control input vector (x0, x1, x2, x3, x4, u0, u1)
-                x0: x position in global coordinates
-                x1: y position in global coordinates
-                x2: steering angle of front wheels
-                x3: velocity in x direction
-                x4: yaw angle
-                u0: steering angle velocity of front wheels
-                u1: longitudinal acceleration
-            params (Param): jittable dataclass with the following fields:
-                mu (float): friction coefficient
-                C_Sf (float): cornering stiffness of front wheels
-                C_Sr (float): cornering stiffness of rear wheels
-                lf (float): distance from center of gravity to front axle
-                lr (float): distance from center of gravity to rear axle
-                h (float): height of center of gravity
-                m (float): mass of vehicle
-                I (float): moment of inertia of vehicle, about Z axis
-                s_min (float): minimum steering angle
-                s_max (float): maximum steering angle
-                sv_min (float): minimum steering velocity
-                sv_max (float): maximum steering velocity
-                v_switch (float): velocity above which the acceleration is no longer able to create wheel slip
-                a_max (float): maximum allowed acceleration
-                v_min (float): minimum allowed velocity
-                v_max (float): maximum allowed velocity
+    The implementation follows section 7 of the CommonRoad vehicle models
+    reference and blends the dynamic and low-speed kinematic branches.
 
-        Returns:
-            f (jax.numpy.ndarray (7, )): right hand side of differential equations
+    Parameters
+    ----------
+    x_and_u : chex.Array, shape (9,)
+        State and control vector
+        ``[x, y, delta, v, psi, psi_dot, beta, steering_command,
+        longitudinal_command]``.
+    params : Param
+        Jittable simulation parameters, including geometry, tire coefficients,
+        control limits, action modes, and timestep.
+
+    Returns
+    -------
+    chex.Array, shape (9,)
+        Right-hand side of the blended single-track differential equations with
+        two dummy control dimensions appended.
     """
     # States
     DELTA = x_and_u[2]
@@ -526,15 +513,25 @@ def pid_steer(steer, current_steer, max_sv):
 @jax.jit
 def pid_accl(speed, current_speed, max_a, max_v, min_v):
     """
-    Basic controller for speed/steer -> accl./steer vel.
+    Convert desired speed to longitudinal acceleration.
 
-        Args:
-            speed (float): desired input speed
-            steer (float): desired input steering angle
+    Parameters
+    ----------
+    speed : float
+        Desired vehicle speed.
+    current_speed : float
+        Current vehicle speed.
+    max_a : float
+        Maximum acceleration magnitude.
+    max_v : float
+        Maximum allowed velocity.
+    min_v : float
+        Minimum allowed velocity.
 
-        Returns:
-            accl (float): desired input acceleration
-            sv (float): desired input steering velocity
+    Returns
+    -------
+    float
+        Desired longitudinal acceleration.
     """
     # accl
     vel_diff = speed - current_speed

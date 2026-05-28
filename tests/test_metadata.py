@@ -47,6 +47,20 @@ class TestMetadata(unittest.TestCase):
 
         self.assertEqual(missing_modules, [])
 
+    def test_sphinx_uses_numpy_style_docstrings(self):
+        repo_root = pathlib.Path(__file__).parent.parent
+        conf_text = (repo_root / "docs" / "conf.py").read_text()
+        package_text = "\n".join(
+            path.read_text()
+            for path in sorted((repo_root / "f1tenth_gym_jax").rglob("*.py"))
+        )
+
+        self.assertIn("napoleon_numpy_docstring = True", conf_text)
+        self.assertIn("napoleon_google_docstring = False", conf_text)
+        for fragment in ("Args:", "Returns:", "return:"):
+            with self.subTest(fragment=fragment):
+                self.assertNotIn(fragment, package_text)
+
     def test_ci_jobs_install_extras_used_by_their_commands(self):
         workflow_path = (
             pathlib.Path(__file__).parent.parent / ".github/workflows/ci.yml"

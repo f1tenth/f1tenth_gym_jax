@@ -78,6 +78,10 @@ The final `v0` is the environment ID version.
 Older model filenames that omit `timestep_ratio` are still accepted and use
 `timestep_ratio=1`.
 
+Bundled maps are loaded from the installed package. Downloaded maps are cached
+under `$XDG_CACHE_HOME/f1tenth_gym_jax/maps` by default; set
+`F1TENTH_GYM_JAX_MAP_DIR` to use another writable map directory.
+
 ## Docker
 
 ```bash

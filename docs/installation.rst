@@ -37,3 +37,10 @@ Docker
 
     docker build -t f1tenth_gym_jax -f Dockerfile .
     docker run --gpus all -it -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix f1tenth_gym_jax
+
+Map cache
+---------
+
+Bundled maps are loaded from the installed package. Downloaded maps are stored
+under ``$XDG_CACHE_HOME/f1tenth_gym_jax/maps`` by default. Set
+``F1TENTH_GYM_JAX_MAP_DIR`` to use a different writable map cache.

@@ -1,6 +1,10 @@
+import os
+import pathlib
+import tempfile
 import unittest
+from unittest.mock import patch
 
-from f1tenth_gym_jax.registration import _parse_scenario, make
+from f1tenth_gym_jax.registration import _parse_scenario, list_available_maps, make
 
 
 class TestRegistration(unittest.TestCase):
@@ -169,3 +173,11 @@ class TestRegistration(unittest.TestCase):
         )
 
         self.assertEqual(env.params.max_steps, 42)
+
+    def test_list_available_maps_includes_configured_cache_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cached_map = pathlib.Path(tmpdir) / "CustomCachedMap"
+            cached_map.mkdir()
+
+            with patch.dict(os.environ, {"F1TENTH_GYM_JAX_MAP_DIR": tmpdir}):
+                self.assertIn("CustomCachedMap", list_available_maps())

@@ -1,6 +1,5 @@
-import pathlib
-
 from .envs import F110Env
+from .envs.track.utils import get_map_search_dirs
 from .envs.utils import VALID_REWARDS, Param
 
 _VALID_SCAN_MODES = {"scan", "noscan"}
@@ -189,10 +188,10 @@ def make(env_id: str, **env_kwargs):
 
 def list_available_maps() -> list[str]:
     """Return built-in downloadable maps plus map folders available locally."""
-    map_dir = pathlib.Path(__file__).parent.parent / "maps"
     local_maps = []
-    if map_dir.exists():
-        local_maps = [path.name for path in map_dir.iterdir() if path.is_dir()]
+    for map_dir in get_map_search_dirs():
+        if map_dir.exists():
+            local_maps.extend(path.name for path in map_dir.iterdir() if path.is_dir())
     return sorted(set(registered_maps + local_maps))
 
 

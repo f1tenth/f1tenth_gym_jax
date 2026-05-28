@@ -1,4 +1,5 @@
 import io
+import os
 import pathlib
 import tarfile
 import tempfile
@@ -13,6 +14,15 @@ from f1tenth_gym_jax.envs.track.utils import _safe_extractall
 
 
 class TestTrack(unittest.TestCase):
+    def _track_archive(self, track_name: str) -> bytes:
+        archive = io.BytesIO()
+        with tarfile.open(fileobj=archive, mode="w:xz") as tar:
+            payload = b"placeholder"
+            info = tarfile.TarInfo(f"{track_name}/placeholder.txt")
+            info.size = len(payload)
+            tar.addfile(info, io.BytesIO(payload))
+        return archive.getvalue()
+
     def test_error_handling(self):
         wrong_track_name = "i_dont_exists"
         response = Mock(status_code=404)
@@ -24,6 +34,25 @@ class TestTrack(unittest.TestCase):
             )
 
         request_get.assert_called_once()
+
+    def test_downloaded_track_uses_configured_map_cache(self):
+        track_name = "DownloadedTrackForTest"
+        response = Mock(status_code=200, content=self._track_archive(track_name))
+        response.raise_for_status = Mock()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(os.environ, {"F1TENTH_GYM_JAX_MAP_DIR": tmpdir}):
+                with patch(
+                    "f1tenth_gym_jax.envs.track.utils.requests.get"
+                ) as request_get:
+                    request_get.return_value = response
+                    track_dir = find_track_dir(track_name)
+
+            self.assertEqual(track_dir, pathlib.Path(tmpdir) / track_name)
+            self.assertTrue((track_dir / "placeholder.txt").exists())
+
+        request_get.assert_called_once()
+        response.raise_for_status.assert_called_once()
 
     def test_safe_archive_extraction_rejects_path_traversal(self):
         with tempfile.TemporaryDirectory() as tmpdir:

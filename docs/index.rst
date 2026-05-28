@@ -43,9 +43,9 @@ If you find this Gym environment useful, please consider citing:
 
 .. code::
   
-  @inproceedings{o2020textscf1tenth,
-    title={textscF1TENTH: An Open-source Evaluation Environment for Continuous Control and Reinforcement Learning},
-    author={O’Kelly, Matthew and Zheng, Hongrui and Karthik, Dhruv and Mangharam, Rahul},
+  @inproceedings{okelly2020f1tenth,
+    title={F1TENTH: An Open-source Evaluation Environment for Continuous Control and Reinforcement Learning},
+    author={O'Kelly, Matthew and Zheng, Hongrui and Karthik, Dhruv and Mangharam, Rahul},
     booktitle={NeurIPS 2019 Competition and Demonstration Track},
     pages={77--89},
     year={2020},
@@ -55,7 +55,7 @@ If you find this Gym environment useful, please consider citing:
 Physical Platform
 -------------------
 
-To build a physical 1/10th scale vehicle, following the guide here: https://f1tenth.org/build.html
+To build a physical 1/10th scale vehicle, follow the guide here: https://f1tenth.org/build.html
 
 .. image:: assets/f110cover.png
   :width: 400

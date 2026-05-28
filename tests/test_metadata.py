@@ -26,18 +26,25 @@ class TestMetadata(unittest.TestCase):
         self.assertIn("readthedocs.org/projects/f1tenth-gym-jax/badge", readme)
         self.assertIn("f1tenth-gym-jax.readthedocs.io/en/latest", readme)
 
-    def test_ci_test_job_installs_extras_used_by_tested_examples(self):
+    def test_ci_jobs_install_extras_used_by_their_commands(self):
         workflow_path = (
             pathlib.Path(__file__).parent.parent / ".github/workflows/ci.yml"
         )
         workflow = yaml.safe_load(workflow_path.read_text())
-        test_steps = workflow["jobs"]["tests"]["steps"]
-        install_step = next(
-            step for step in test_steps if step.get("name") == "Install dependencies"
-        )
 
-        self.assertIn("--extra examples", install_step["run"])
-        self.assertIn("--extra rl", install_step["run"])
+        def install_command(job_name):
+            steps = workflow["jobs"][job_name]["steps"]
+            return next(
+                step for step in steps if step.get("name") == "Install dependencies"
+            )["run"]
+
+        for job_name in ("tests", "examples"):
+            with self.subTest(job=job_name):
+                command = install_command(job_name)
+                self.assertIn("--extra examples", command)
+                self.assertIn("--extra rl", command)
+
+        self.assertIn("--extra docs", install_command("docs"))
 
     def test_dev_dependencies_enable_notebook_formatting(self):
         pyproject = pathlib.Path(__file__).parent.parent / "pyproject.toml"

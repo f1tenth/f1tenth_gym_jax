@@ -130,6 +130,7 @@ class TestExamples(unittest.TestCase):
                 self.assertIn("jax.random.key", source)
                 for fragment in _BANNED_STALE_EXAMPLE_FRAGMENTS:
                     self.assertNotIn(fragment, source)
+                self.assertNotIn("[:, 100,", source)
 
                 for cell in notebook["cells"]:
                     if cell["cell_type"] == "code":

@@ -5,6 +5,18 @@ import tempfile
 import requests
 
 
+def _safe_extractall(tar_file: tarfile.TarFile, path: pathlib.Path) -> None:
+    """Extract a map archive without allowing paths outside the target directory."""
+    target_dir = path.resolve()
+    for member in tar_file.getmembers():
+        member_path = (target_dir / member.name).resolve()
+        if member_path != target_dir and target_dir not in member_path.parents:
+            raise ValueError(f"Unsafe path in map archive: {member.name}")
+        if member.issym() or member.islnk():
+            raise ValueError(f"Links are not allowed in map archives: {member.name}")
+    tar_file.extractall(target_dir)
+
+
 def find_track_dir(track_name: str) -> pathlib.Path:
     """
     Find the directory of the track map corresponding to the given track name.
@@ -27,21 +39,22 @@ def find_track_dir(track_name: str) -> pathlib.Path:
     map_dir = pathlib.Path(__file__).parent.parent.parent.parent / "maps"
 
     if not (map_dir / track_name).exists():
+        map_dir.mkdir(parents=True, exist_ok=True)
         print("Downloading Files for: " + track_name)
         tracks_url = "http://api.f1tenth.org/" + track_name + ".tar.xz"
-        tracks_r = requests.get(url=tracks_url, allow_redirects=True)
+        tracks_r = requests.get(url=tracks_url, allow_redirects=True, timeout=30)
         if tracks_r.status_code == 404:
             raise FileNotFoundError(f"No maps exists for {track_name}.")
+        tracks_r.raise_for_status()
 
-        tempdir = tempfile.gettempdir() + "/"
+        archive_path = pathlib.Path(tempfile.gettempdir()) / f"{track_name}.tar.xz"
 
-        with open(tempdir + track_name + ".tar.xz", "wb") as f:
+        with archive_path.open("wb") as f:
             f.write(tracks_r.content)
 
         print("Extracting Files for: " + track_name)
-        tracks_file = tarfile.open(tempdir + track_name + ".tar.xz")
-        tracks_file.extractall(map_dir)
-        tracks_file.close()
+        with tarfile.open(archive_path) as tracks_file:
+            _safe_extractall(tracks_file, map_dir)
 
     # search for map in the map directory
     for subdir in map_dir.iterdir():

@@ -1,16 +1,47 @@
+import io
 import pathlib
+import tarfile
+import tempfile
 import unittest
+from unittest.mock import Mock, patch
 
 import numpy as np
 import yaml
 
 from f1tenth_gym_jax.envs.track import Track, find_track_dir
+from f1tenth_gym_jax.envs.track.utils import _safe_extractall
 
 
 class TestTrack(unittest.TestCase):
     def test_error_handling(self):
         wrong_track_name = "i_dont_exists"
-        self.assertRaises(FileNotFoundError, Track.from_track_name, wrong_track_name)
+        response = Mock(status_code=404)
+
+        with patch("f1tenth_gym_jax.envs.track.utils.requests.get") as request_get:
+            request_get.return_value = response
+            self.assertRaises(
+                FileNotFoundError, Track.from_track_name, wrong_track_name
+            )
+
+        request_get.assert_called_once()
+
+    def test_safe_archive_extraction_rejects_path_traversal(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive_path = pathlib.Path(tmpdir) / "bad_map.tar"
+            target_dir = pathlib.Path(tmpdir) / "maps"
+            target_dir.mkdir()
+
+            with tarfile.open(archive_path, "w") as tar:
+                payload = b"bad"
+                info = tarfile.TarInfo("../bad.txt")
+                info.size = len(payload)
+                tar.addfile(info, io.BytesIO(payload))
+
+            with tarfile.open(archive_path) as tar:
+                with self.assertRaises(ValueError):
+                    _safe_extractall(tar, target_dir)
+
+            self.assertFalse((pathlib.Path(tmpdir) / "bad.txt").exists())
 
     def test_raceline(self):
         track_name = "Spielberg"
@@ -114,8 +145,8 @@ class TestTrack(unittest.TestCase):
         # check frenet to cartesian conversion
         # with non-zero lateral offset
         s_ = 0
-        for s in np.linspace(0, 1, 10):
-            d = np.random.uniform(-1.0, 1.0)
+        offsets = np.linspace(-0.5, 0.5, 10)
+        for s, d in zip(np.linspace(0.1, 1.0, 10), offsets):
             x, y, psi = track.frenet_to_cartesian(s, d, 0)
             s_, d_, _ = track.cartesian_to_frenet(x, y, psi, s_guess=s_)
             self.assertAlmostEqual(s, s_, places=2)

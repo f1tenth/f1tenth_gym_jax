@@ -1,4 +1,6 @@
 **/wandb/
+f1tenth_gym_jax_rollout.gif
+maps/RandomTrack*/
 build/
 gym/f110_gym.egg-info
 __pycache__

@@ -28,7 +28,7 @@ class TrainConfig(NamedTuple):
     seed: int = 420
 
     # sim params
-    # {map_name}_{num_agents}_{scan/noscan}_{reward_type}_v0
+    # {map}_{num_agents}_{scan|noscan}_{collision|nocollision}_{rewards}_{longitudinal+steering}_{timestep_ratio}_{max_steps}_v0
     num_agents: int = 1
     action_dim: int = 2
     env_name: str = f"Spielberg_{num_agents}_scan_collision_progress+alive_velocity+steeringangle_10_v0"

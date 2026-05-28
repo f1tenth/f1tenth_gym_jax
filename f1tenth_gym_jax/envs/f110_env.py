@@ -82,12 +82,15 @@ class F110Env(MultiAgentEnv):
         if params.model == "st":
             self.model_func = vehicle_dynamics_st_switching
             self.state_size = 7
+            self.cartesian_obs_indices = (2, 3, 5, 6)
         elif params.model == "st_smooth":
             self.model_func = vehicle_dynamics_st_smooth
             self.state_size = 7
+            self.cartesian_obs_indices = (2, 3, 5, 6)
         elif params.model == "ks":
             self.model_func = vehicle_dynamics_ks
             self.state_size = 5
+            self.cartesian_obs_indices = (2, 3)
         else:
             raise (
                 ValueError(
@@ -310,9 +313,7 @@ class F110Env(MultiAgentEnv):
             agent_scan = state.scans[agent_ind, :]
 
             # extract states
-            cart_state = state.cartesian_states[
-                agent_ind, [2, 3, 5, 6]
-            ]  # [x, y, delta, v, psi, psi_dot, beta]
+            cart_state = state.cartesian_states[agent_ind, self.cartesian_obs_indices]
             fre_state = state.frenet_states[agent_ind, :]  # [s, ey, epsi]
             agent_state = jnp.concatenate((fre_state, cart_state))
 
@@ -325,14 +326,18 @@ class F110Env(MultiAgentEnv):
             other_agent_poses = state.cartesian_states[other_agent_indices, :][
                 :, jnp.array([0, 1, 4])
             ]
-            relative_poses = other_agent_poses - agent_state[jnp.array([0, 1, 4])]
+            agent_pose = state.cartesian_states[agent_ind, jnp.array([0, 1, 4])]
+            relative_poses = other_agent_poses - agent_pose
+            relative_yaw = jnp.arctan2(
+                jnp.sin(relative_poses[:, 2]), jnp.cos(relative_poses[:, 2])
+            )
             other_agent_velocities = state.cartesian_states[other_agent_indices, 3]
             relative_states = jnp.column_stack(
                 (
                     relative_poses[:, 0],
                     relative_poses[:, 1],
                     other_agent_velocities,
-                    relative_poses[:, 2],
+                    relative_yaw,
                 )
             ).flatten()
             if not self.params.observe_others:

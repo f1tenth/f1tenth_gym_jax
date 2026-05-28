@@ -98,8 +98,8 @@ below runs eight environments in parallel for 100 control steps.
 ``trajectory`` has shape ``(steps, envs, agents, state_dim)`` and can be passed
 directly to the web dashboard renderer.
 
-Example Scripts
----------------
+Example Scripts and Notebooks
+-----------------------------
 
 The repository includes runnable examples:
 
@@ -121,3 +121,9 @@ The repository includes runnable examples:
 
 ``examples/train_ppo_example.py`` and ``examples/eval_ppo_example.py``
     PPO training and evaluation entry points.
+
+``examples/benchmark_example.ipynb``
+    Notebook showing vectorized rollout timing with the JAX environment API.
+
+``examples/rendering_example.ipynb``
+    Notebook showing how to collect rollouts and write the web dashboard.

@@ -59,6 +59,8 @@ Longer example usage lives in:
 - `examples/render_dashboard.py`
 - `examples/run_in_empty_track.py`
 - `examples/random_trackgen.py`
+- `examples/benchmark_example.ipynb`
+- `examples/rendering_example.ipynb`
 
 ## Environment IDs
 

@@ -103,6 +103,22 @@ class TestTrack(unittest.TestCase):
         self.assertEqual(track.filepath, track_dir / "Space Map.png")
         self.assertGreater(track.centerline.s[-1], 0.0)
 
+    def test_map_lookup_ignores_non_directory_name_matches(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            map_root = pathlib.Path(tmpdir)
+            (map_root / "FileOnlyMap").write_text("not a map directory")
+
+            with patch.dict(os.environ, {"F1TENTH_GYM_JAX_MAP_DIR": tmpdir}):
+                with patch(
+                    "f1tenth_gym_jax.envs.track.utils.requests.get"
+                ) as request_get:
+                    request_get.return_value = Mock(status_code=404)
+
+                    with self.assertRaisesRegex(FileNotFoundError, "No maps exists"):
+                        find_track_dir("FileOnlyMap")
+
+            request_get.assert_called_once()
+
     def test_map_image_path_must_stay_inside_track_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             map_root = pathlib.Path(tmpdir)

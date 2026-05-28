@@ -56,7 +56,7 @@ def _find_existing_track_dir(
         if not map_dir.exists():
             continue
         for subdir in map_dir.iterdir():
-            if track_name == _normalized_track_name(subdir):
+            if subdir.is_dir() and track_name == _normalized_track_name(subdir):
                 return subdir
     return None
 

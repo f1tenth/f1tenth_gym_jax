@@ -26,3 +26,26 @@ class TestMetadata(unittest.TestCase):
 
         self.assertIn("--extra examples", install_step["run"])
         self.assertIn("--extra rl", install_step["run"])
+
+    def test_docker_context_excludes_local_artifacts(self):
+        repo_root = pathlib.Path(__file__).parent.parent
+        dockerfile = (repo_root / "Dockerfile").read_text()
+        dockerignore = repo_root / ".dockerignore"
+        patterns = {
+            line.strip()
+            for line in dockerignore.read_text().splitlines()
+            if line.strip() and not line.startswith("#")
+        }
+
+        self.assertIn("COPY . /f1tenth_gym_jax", dockerfile)
+        for pattern in (
+            ".git/",
+            ".venv/",
+            "wandb/",
+            "**/__pycache__/",
+            ".pytest_cache/",
+            "build/",
+            "dist/",
+        ):
+            with self.subTest(pattern=pattern):
+                self.assertIn(pattern, patterns)

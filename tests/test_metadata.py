@@ -81,6 +81,21 @@ class TestMetadata(unittest.TestCase):
 
         self.assertIn("--extra docs", install_command("docs"))
 
+    def test_ci_package_job_checks_all_tracked_map_files(self):
+        workflow_path = (
+            pathlib.Path(__file__).parent.parent / ".github/workflows/ci.yml"
+        )
+        workflow = yaml.safe_load(workflow_path.read_text())
+        package_steps = workflow["jobs"]["package"]["steps"]
+        check_step = next(
+            step for step in package_steps if step.get("name") == "Check packaged maps"
+        )
+        command = check_step["run"]
+
+        self.assertIn('["git", "ls-files", "maps"]', command)
+        self.assertIn('not Path(path).name.startswith(".")', command)
+        self.assertNotIn('"maps/Spielberg/Spielberg.yaml"', command)
+
     def test_dev_dependencies_enable_notebook_formatting(self):
         pyproject = pathlib.Path(__file__).parent.parent / "pyproject.toml"
         dev_dependencies = tomllib.loads(pyproject.read_text())["dependency-groups"][

@@ -83,6 +83,7 @@ jobs:
       - name: Check packaged maps
         run: |
           python - <<'PY'
+          import subprocess
           import tarfile
           import zipfile
           from pathlib import Path
@@ -90,10 +91,12 @@ jobs:
           sdist = next(Path("dist").glob("*.tar.gz"))
           wheel = next(Path("dist").glob("*.whl"))
           required = {
-              "maps/Spielberg/Spielberg.yaml",
-              "maps/Spielberg/Spielberg.png",
-              "maps/Spielberg/Spielberg_centerline.csv",
-              "maps/Spielberg/Spielberg_raceline.csv",
+              path
+              for path in subprocess.check_output(
+                  ["git", "ls-files", "maps"],
+                  text=True,
+              ).splitlines()
+              if not Path(path).name.startswith(".")
           }
 
           with tarfile.open(sdist) as archive:

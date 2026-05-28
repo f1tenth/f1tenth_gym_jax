@@ -66,6 +66,32 @@ Longer example usage lives in:
 - `examples/benchmark_example.ipynb`
 - `examples/rendering_example.ipynb`
 
+## Visualization
+
+Rollout examples can write a self-contained HTML dashboard:
+
+```bash
+uv run python examples/waypoint_follow.py \
+  --num-agents 3 \
+  --num-envs 10 \
+  --steps 500 \
+  --render-output /tmp/f1tenth_dashboard.html
+```
+
+If the browser is running on the same machine, open the generated HTML file
+directly. If the browser is on another machine, serve the output directory from
+the remote host:
+
+```bash
+uv run python -m http.server 8766 --bind 0.0.0.0 --directory /tmp
+```
+
+Then open:
+
+```text
+http://remote-host:8766/f1tenth_dashboard.html
+```
+
 ## Environment IDs
 
 Environment IDs use this pattern:

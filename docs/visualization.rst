@@ -13,6 +13,10 @@ The dashboard includes:
   and distance
 * labeled overview traces for every rollout and agent
 * a trajectory playback canvas with vehicle labels
+* pan and zoom controls for the overview and playback canvases
+* visualization toggles for map layers, labels, trajectories, vehicles, and
+  visible agents
+* a playback camera selector that can center on a selected agent
 * a timestep scrubber
 * a speed multiplier scrubber that defaults to ``1.0x`` actual environment time
 * a per-rollout statistics table
@@ -38,6 +42,39 @@ For a batched waypoint-following rollout:
 
 Use ``--no-render`` on examples that support it when only benchmark or training
 output is needed.
+
+Open or Host the Dashboard
+--------------------------
+
+If the browser is running on the same machine, open the generated HTML file
+directly:
+
+.. code:: bash
+
+    xdg-open /tmp/f1tenth_dashboard.html
+
+``WebRenderer`` can also ask Python to open the generated file with the system
+browser:
+
+.. code:: python
+
+    WebRenderer(env, open_browser=True).render(trajectory)
+
+If the browser is running on another machine, serve the output directory from
+the remote host:
+
+.. code:: bash
+
+    uv run python -m http.server 8766 --bind 0.0.0.0 --directory /tmp
+
+Then open the dashboard from the remote browser:
+
+.. code:: text
+
+    http://remote-host:8766/f1tenth_dashboard.html
+
+Use the host name or IP address that reaches the remote host. Stop the server
+with ``Ctrl+C`` when it is no longer needed.
 
 Render From Python
 ------------------
@@ -105,13 +142,3 @@ To visualize a trajectory recorded at a different cadence, pass an explicit
 
     renderer = WebRenderer(env, render_fps=20.0)
     renderer.render(trajectory, output_path="/tmp/twenty_hz_rollout.html")
-
-Opening the Browser
--------------------
-
-By default the renderer only writes the HTML file. Set ``open_browser=True`` to
-ask Python to open the generated file with the system browser:
-
-.. code:: python
-
-    WebRenderer(env, open_browser=True).render(trajectory)

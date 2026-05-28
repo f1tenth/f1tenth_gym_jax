@@ -52,6 +52,12 @@ class TestRenderer(unittest.TestCase):
             self.assertIn("Timestep scrubber", html)
             self.assertIn("Speed multiplier", html)
             self.assertIn("actual real time", html)
+            self.assertIn("Visualization Options", html)
+            self.assertIn("cameraSelect", html)
+            self.assertIn("bindCanvasPanZoom", html)
+            self.assertIn("overviewOtherRollouts", html)
+            self.assertIn("playbackFullTrace", html)
+            self.assertNotIn(' + "<span><i class="swatch"', html)
 
             payload = _payload_from_dashboard(output)
             self.assertEqual(payload["summary"]["rollouts"], 1)

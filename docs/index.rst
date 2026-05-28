@@ -15,28 +15,6 @@ GitHub repo: https://github.com/f1tenth/f1tenth_gym_jax
 
 Note that the GitHub repository contains the source for these docs. If you see a mistake, please contribute a fix.
 
-Example Use Cases
------------------
-
-1. The gym environment is used as the backend for the F1TENTH virtual racing online competition at IROS 2020:
-
-.. raw:: html
-
-  <iframe width="560" height="315" src="https://www.youtube.com/embed/VzrbRwhDw_c" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-
-
-2. The gym environment is used as the simulation engine for the FormulaZero project: https://github.com/travelbureau/f0_icml_code
-
-.. raw:: html
-
-    <iframe width="560" height="315" src="https://www.youtube.com/embed/7Yat9FZzE4g" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-
-3. The gym environment is used as the simulation engine for the TunerCar project: http://www.lewissoft.com/pdf/ICRA2020/1667.pdf
-
-.. raw:: html
-
-  <iframe width="560" height="315" src="https://www.youtube.com/embed/ay7L4VAfa_w" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-
 Citing
 --------
 If you find this Gym environment useful, please consider citing:
@@ -55,11 +33,13 @@ If you find this Gym environment useful, please consider citing:
 Physical Platform
 -------------------
 
-To build a physical 1/10th scale vehicle, follow the guide here: https://f1tenth.org/build.html
+To build a physical 1/10th scale vehicle, follow the guide here:
+https://roboracer.ai/build
 
-.. image:: assets/f110cover.png
+.. image:: https://f1tenth.readthedocs.io/en/foxy_test/_images/f1tenth_NX.png
   :width: 400
   :align: center
+  :target: https://roboracer.ai/build
 
 .. toctree::
   :caption: INSTALLATION

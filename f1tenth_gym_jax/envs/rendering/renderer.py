@@ -373,13 +373,52 @@ canvas {
   background: #fff;
   border: 1px solid var(--border);
   border-radius: 6px;
+  cursor: grab;
+  touch-action: none;
+}
+canvas.is-panning { cursor: grabbing; }
+.canvas-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 .controls {
   display: grid;
-  grid-template-columns: auto minmax(180px, 1fr) auto minmax(180px, 1fr) auto;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
   align-items: center;
   margin-bottom: 12px;
+}
+.control-pair {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+.option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.option-group + .option-group { margin-top: 12px; }
+.option-group h3 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+.check-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
 }
 button, select, input {
   font: inherit;
@@ -400,9 +439,6 @@ th:first-child, td:first-child { text-align: left; }
 th { color: var(--muted); font-weight: 650; }
 .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 10px; color: var(--muted); }
 .swatch { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
-@media (max-width: 780px) {
-  .controls { grid-template-columns: 1fr; }
-}
 </style>
 </head>
 <body>
@@ -415,21 +451,48 @@ th { color: var(--muted); font-weight: 650; }
   <section class="stats" id="summary"></section>
   <section class="panel">
     <h2>Batched Rollout Overview</h2>
+    <div class="canvas-toolbar">
+      <span id="overviewZoom">100%</span>
+      <button id="resetOverviewView">Reset view</button>
+    </div>
     <canvas id="overview"></canvas>
     <div class="legend" id="legend"></div>
   </section>
   <section class="panel">
+    <h2>Visualization Options</h2>
+    <div class="option-group">
+      <h3>Layers</h3>
+      <div class="option-grid" id="layerOptions"></div>
+    </div>
+    <div class="option-group">
+      <h3>Agents</h3>
+      <div class="option-grid" id="agentOptions"></div>
+    </div>
+  </section>
+  <section class="panel">
     <h2>Trajectory Playback</h2>
     <div class="controls">
-      <label for="rolloutSelect">Rollout</label>
-      <select id="rolloutSelect"></select>
-      <label for="stepRange">Timestep scrubber</label>
-      <input id="stepRange" type="range" min="0" value="0" step="1">
+      <div class="control-pair">
+        <label for="rolloutSelect">Rollout</label>
+        <select id="rolloutSelect"></select>
+      </div>
+      <div class="control-pair">
+        <label for="cameraSelect">Camera</label>
+        <select id="cameraSelect"></select>
+      </div>
+      <div class="control-pair">
+        <label for="stepRange">Timestep scrubber</label>
+        <input id="stepRange" type="range" min="0" value="0" step="1">
+      </div>
+      <div class="control-pair">
+        <label for="speedRange">Speed multiplier</label>
+        <input id="speedRange" type="range" min="0.1" max="4" step="0.1" value="1">
+      </div>
       <button id="playPause">Pause</button>
-      <label for="speedRange">Speed multiplier</label>
-      <input id="speedRange" type="range" min="0.1" max="4" step="0.1" value="1">
+      <button id="resetPlaybackView">Reset view</button>
       <span id="speedLabel">1.0x actual real time</span>
       <span id="stepLabel">step 0</span>
+      <span id="playbackZoom">100%</span>
     </div>
     <canvas id="playback"></canvas>
   </section>
@@ -463,15 +526,51 @@ let speedMultiplier = 1.0;
 let playing = Boolean(payload.playing);
 let lastTimestamp = 0;
 let carriedMs = 0;
+let cameraTarget = "free";
+const viewState = {
+  overview: { zoom: 1, panX: 0, panY: 0, dragging: false, lastX: 0, lastY: 0 },
+  playback: { zoom: 1, panX: 0, panY: 0, dragging: false, lastX: 0, lastY: 0 },
+};
+const layerOptions = {
+  map: true,
+  centerline: true,
+  raceline: true,
+  labels: true,
+  markers: true,
+  overviewOtherRollouts: true,
+  playbackFullTrace: true,
+  playbackHistory: true,
+  vehicles: true,
+};
+const layerLabels = {
+  map: "Map",
+  centerline: "Centerline",
+  raceline: "Raceline",
+  labels: "Labels",
+  markers: "Start/end markers",
+  overviewOtherRollouts: "Other rollouts",
+  playbackFullTrace: "Full trace",
+  playbackHistory: "History trace",
+  vehicles: "Vehicles",
+};
+const visibleAgents = payload.env.agents.map(() => true);
 
 function fmt(value, digits = 2) {
   return Number(value).toFixed(digits);
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function canvasHeight() {
+  return Math.max(360, Math.floor(payload.canvas.height * 0.68));
+}
+
 function setCanvasSize(canvas) {
   const ratio = window.devicePixelRatio || 1;
   const width = payload.canvas.width;
-  const height = Math.max(360, Math.floor(payload.canvas.height * 0.68));
+  const height = canvasHeight();
   canvas.width = Math.floor(width * ratio);
   canvas.height = Math.floor(height * ratio);
   canvas.style.maxWidth = width + "px";
@@ -481,7 +580,7 @@ function setCanvasSize(canvas) {
   return { width, height, ctx };
 }
 
-function makeTransform(width, height) {
+function makeBaseTransform(width, height) {
   const b = payload.bounds;
   const margin = 32;
   const rangeX = b.maxX - b.minX;
@@ -495,12 +594,57 @@ function makeTransform(width, height) {
     scale,
     x: value => margin + extraX / 2 + (value - b.minX) * scale,
     y: value => height - margin - extraY / 2 - (value - b.minY) * scale,
-    length: value => value * scale,
   };
 }
 
+function makeTransform(width, height, view, focusPoint = null) {
+  const base = makeBaseTransform(width, height);
+  if (focusPoint) {
+    view.panX = width / 2 - base.x(focusPoint[0]) * view.zoom;
+    view.panY = height / 2 - base.y(focusPoint[1]) * view.zoom;
+  }
+  return {
+    scale: base.scale * view.zoom,
+    x: value => base.x(value) * view.zoom + view.panX,
+    y: value => base.y(value) * view.zoom + view.panY,
+    length: value => value * base.scale * view.zoom,
+  };
+}
+
+function canvasPoint(event, canvas) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (event.clientX - rect.left) * (payload.canvas.width / rect.width),
+    y: (event.clientY - rect.top) * (canvasHeight() / rect.height),
+  };
+}
+
+function zoomView(view, point, deltaY) {
+  const nextZoom = clamp(view.zoom * (deltaY < 0 ? 1.14 : 1 / 1.14), 0.2, 50);
+  const factor = nextZoom / view.zoom;
+  view.panX = point.x - (point.x - view.panX) * factor;
+  view.panY = point.y - (point.y - view.panY) * factor;
+  view.zoom = nextZoom;
+}
+
+function resetView(kind) {
+  viewState[kind].zoom = 1;
+  viewState[kind].panX = 0;
+  viewState[kind].panY = 0;
+  if (kind === "playback") {
+    cameraTarget = "free";
+    document.getElementById("cameraSelect").value = cameraTarget;
+  }
+  drawAll();
+}
+
+function updateZoomLabels() {
+  document.getElementById("overviewZoom").textContent = `${Math.round(viewState.overview.zoom * 100)}%`;
+  document.getElementById("playbackZoom").textContent = `${Math.round(viewState.playback.zoom * 100)}%`;
+}
+
 function drawMap(ctx, tr) {
-  if (!payload.map.image || !mapImage.complete) {
+  if (!layerOptions.map || !payload.map.image || !mapImage.complete) {
     return;
   }
   const x = tr.x(payload.map.origin[0]);
@@ -538,32 +682,53 @@ function drawPolyline(ctx, tr, points, color, width, label) {
 function drawBase(ctx, tr) {
   ctx.clearRect(0, 0, payload.canvas.width, payload.canvas.height);
   drawMap(ctx, tr);
-  drawPolyline(ctx, tr, payload.track.centerline, "#546a7b", 1.2, "centerline");
-  drawPolyline(ctx, tr, payload.track.raceline, "#111827", 1.8, "raceline");
+  if (layerOptions.centerline) {
+    drawPolyline(ctx, tr, payload.track.centerline, "#546a7b", 1.2, layerOptions.labels ? "centerline" : "");
+  }
+  if (layerOptions.raceline) {
+    drawPolyline(ctx, tr, payload.track.raceline, "#111827", 1.8, layerOptions.labels ? "raceline" : "");
+  }
 }
 
 function drawOverview() {
   const canvas = document.getElementById("overview");
   const { width, height, ctx } = setCanvasSize(canvas);
-  const tr = makeTransform(width, height);
+  const tr = makeTransform(width, height, viewState.overview);
   drawBase(ctx, tr);
   ctx.save();
   for (let r = 0; r < payload.trajectory.length; r += 1) {
+    if (!layerOptions.overviewOtherRollouts && r !== rolloutIndex) {
+      continue;
+    }
     const rollout = payload.trajectory[r];
     for (let a = 0; a < payload.env.numAgents; a += 1) {
+      if (!visibleAgents[a]) {
+        continue;
+      }
       const color = payload.colors[a % payload.colors.length];
       const points = rollout.map(step => [step[a][0], step[a][1]]);
       ctx.globalAlpha = r === rolloutIndex ? 0.92 : 0.34;
       drawPolyline(ctx, tr, points, color, r === rolloutIndex ? 2.2 : 1.1, "");
       const first = points[0];
       const last = points[points.length - 1];
-      ctx.globalAlpha = 0.95;
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(tr.x(first[0]), tr.y(first[1]), 3.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillText(`start r${r} ${payload.env.agents[a]}`, tr.x(first[0]) + 5, tr.y(first[1]) + 12);
-      ctx.fillText(`r${r} ${payload.env.agents[a]}`, tr.x(last[0]) + 5, tr.y(last[1]) - 5);
+      if (layerOptions.markers) {
+        ctx.globalAlpha = 0.95;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(tr.x(first[0]), tr.y(first[1]), 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(tr.x(last[0]), tr.y(last[1]), 3.5, 0, Math.PI * 2);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      }
+      if (layerOptions.labels) {
+        ctx.globalAlpha = 0.95;
+        ctx.fillStyle = color;
+        ctx.fillText(`start r${r} ${payload.env.agents[a]}`, tr.x(first[0]) + 5, tr.y(first[1]) + 12);
+        ctx.fillText(`r${r} ${payload.env.agents[a]}`, tr.x(last[0]) + 5, tr.y(last[1]) - 5);
+      }
     }
   }
   ctx.restore();
@@ -614,31 +779,47 @@ function drawVehicle(ctx, tr, state, agentName, color) {
 
   ctx.fillStyle = "#111827";
   ctx.font = "12px system-ui, sans-serif";
-  ctx.fillText(
-    `${agentName} x=${fmt(state[0], 1)} y=${fmt(state[1], 1)} v=${fmt(state[3], 2)}`,
-    tr.x(state[0]) + 7,
-    tr.y(state[1]) - 7,
-  );
+  if (layerOptions.labels) {
+    ctx.fillText(
+      `${agentName} x=${fmt(state[0], 1)} y=${fmt(state[1], 1)} v=${fmt(state[3], 2)}`,
+      tr.x(state[0]) + 7,
+      tr.y(state[1]) - 7,
+    );
+  }
   ctx.restore();
 }
 
 function drawPlayback() {
   const canvas = document.getElementById("playback");
   const { width, height, ctx } = setCanvasSize(canvas);
-  const tr = makeTransform(width, height);
-  drawBase(ctx, tr);
   const rollout = payload.trajectory[rolloutIndex];
   const current = rollout[stepIndex];
+  const focusAgent = cameraTarget.startsWith("agent:") ? Number(cameraTarget.split(":")[1]) : null;
+  const focusPoint = focusAgent !== null && visibleAgents[focusAgent]
+    ? [current[focusAgent][0], current[focusAgent][1]]
+    : null;
+  const tr = makeTransform(width, height, viewState.playback, focusPoint);
+  drawBase(ctx, tr);
 
   for (let a = 0; a < payload.env.numAgents; a += 1) {
+    if (!visibleAgents[a]) {
+      continue;
+    }
     const color = payload.colors[a % payload.colors.length];
     const fullTrace = rollout.map(step => [step[a][0], step[a][1]]);
     const history = rollout.slice(0, stepIndex + 1).map(step => [step[a][0], step[a][1]]);
-    ctx.globalAlpha = 0.22;
-    drawPolyline(ctx, tr, fullTrace, color, 1.2, "");
-    ctx.globalAlpha = 0.95;
-    drawPolyline(ctx, tr, history, color, 2.6, `${payload.env.agents[a]} path`);
-    drawVehicle(ctx, tr, current[a], payload.env.agents[a], color);
+    if (layerOptions.playbackFullTrace) {
+      ctx.globalAlpha = 0.22;
+      drawPolyline(ctx, tr, fullTrace, color, 1.2, "");
+    }
+    if (layerOptions.playbackHistory) {
+      ctx.globalAlpha = 0.95;
+      drawPolyline(ctx, tr, history, color, 2.6, layerOptions.labels ? `${payload.env.agents[a]} path` : "");
+    }
+    if (layerOptions.vehicles) {
+      ctx.globalAlpha = 1;
+      drawVehicle(ctx, tr, current[a], payload.env.agents[a], color);
+    }
   }
 
   ctx.globalAlpha = 1;
@@ -688,8 +869,41 @@ function renderStats() {
   `).join("");
 
   document.getElementById("legend").innerHTML = payload.env.agents.map((agent, index) =>
-    `<span><i class="swatch" style="background:${payload.colors[index % payload.colors.length]}"></i>${agent}</span>`
-  ).join("") + "<span><i class=\"swatch\" style=\"background:#111827\"></i>raceline</span><span><i class=\"swatch\" style=\"background:#546a7b\"></i>centerline</span>";
+    `<span style="opacity:${visibleAgents[index] ? 1 : 0.38}"><i class="swatch" style="background:${payload.colors[index % payload.colors.length]}"></i>${agent}</span>`
+  ).join("") + '<span><i class="swatch" style="background:#111827"></i>raceline</span><span><i class="swatch" style="background:#546a7b"></i>centerline</span>';
+}
+
+function renderOptions() {
+  const layerContainer = document.getElementById("layerOptions");
+  layerContainer.innerHTML = Object.keys(layerOptions).map(key => `
+    <label class="check-option">
+      <input type="checkbox" data-layer="${key}" ${layerOptions[key] ? "checked" : ""}>
+      <span>${layerLabels[key]}</span>
+    </label>
+  `).join("");
+
+  const agentContainer = document.getElementById("agentOptions");
+  agentContainer.innerHTML = payload.env.agents.map((agent, index) => `
+    <label class="check-option">
+      <input type="checkbox" data-agent="${index}" ${visibleAgents[index] ? "checked" : ""}>
+      <span><i class="swatch" style="background:${payload.colors[index % payload.colors.length]}"></i>${agent}</span>
+    </label>
+  `).join("");
+
+  layerContainer.querySelectorAll("input[data-layer]").forEach(input => {
+    input.addEventListener("change", event => {
+      layerOptions[event.target.dataset.layer] = event.target.checked;
+      renderStats();
+      drawAll();
+    });
+  });
+  agentContainer.querySelectorAll("input[data-agent]").forEach(input => {
+    input.addEventListener("change", event => {
+      visibleAgents[Number(event.target.dataset.agent)] = event.target.checked;
+      renderStats();
+      drawAll();
+    });
+  });
 }
 
 function syncControls() {
@@ -701,6 +915,19 @@ function syncControls() {
     option.textContent = `rollout ${index}`;
     rolloutSelect.appendChild(option);
   });
+  const cameraSelect = document.getElementById("cameraSelect");
+  cameraSelect.innerHTML = "";
+  const freeOption = document.createElement("option");
+  freeOption.value = "free";
+  freeOption.textContent = "Free camera";
+  cameraSelect.appendChild(freeOption);
+  payload.env.agents.forEach((agent, index) => {
+    const option = document.createElement("option");
+    option.value = `agent:${index}`;
+    option.textContent = `Center ${agent}`;
+    cameraSelect.appendChild(option);
+  });
+  cameraSelect.value = cameraTarget;
   const stepRange = document.getElementById("stepRange");
   stepRange.max = String(payload.summary.steps - 1);
   stepRange.value = String(stepIndex);
@@ -712,13 +939,65 @@ function drawAll() {
   document.getElementById("stepRange").value = String(stepIndex);
   document.getElementById("stepLabel").textContent = `step ${stepIndex} / ${payload.summary.steps - 1}`;
   document.getElementById("speedLabel").textContent = `${fmt(speedMultiplier, 1)}x actual real time`;
+  updateZoomLabels();
   drawOverview();
   drawPlayback();
+}
+
+function bindCanvasPanZoom(canvasId, kind) {
+  const canvas = document.getElementById(canvasId);
+  const view = viewState[kind];
+
+  canvas.addEventListener("wheel", event => {
+    event.preventDefault();
+    zoomView(view, canvasPoint(event, canvas), event.deltaY);
+    drawAll();
+  }, { passive: false });
+
+  canvas.addEventListener("pointerdown", event => {
+    canvas.setPointerCapture(event.pointerId);
+    const point = canvasPoint(event, canvas);
+    view.dragging = true;
+    view.lastX = point.x;
+    view.lastY = point.y;
+    canvas.classList.add("is-panning");
+    if (kind === "playback" && cameraTarget !== "free") {
+      cameraTarget = "free";
+      document.getElementById("cameraSelect").value = cameraTarget;
+    }
+  });
+
+  canvas.addEventListener("pointermove", event => {
+    if (!view.dragging) {
+      return;
+    }
+    const point = canvasPoint(event, canvas);
+    view.panX += point.x - view.lastX;
+    view.panY += point.y - view.lastY;
+    view.lastX = point.x;
+    view.lastY = point.y;
+    drawAll();
+  });
+
+  const stopDragging = event => {
+    view.dragging = false;
+    canvas.classList.remove("is-panning");
+    if (canvas.hasPointerCapture(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
+    }
+  };
+  canvas.addEventListener("pointerup", stopDragging);
+  canvas.addEventListener("pointercancel", stopDragging);
+  canvas.addEventListener("dblclick", () => resetView(kind));
 }
 
 document.getElementById("rolloutSelect").addEventListener("change", event => {
   rolloutIndex = Number(event.target.value);
   stepIndex = Math.min(stepIndex, payload.summary.steps - 1);
+  drawAll();
+});
+document.getElementById("cameraSelect").addEventListener("change", event => {
+  cameraTarget = event.target.value;
   drawAll();
 });
 document.getElementById("stepRange").addEventListener("input", event => {
@@ -733,6 +1012,8 @@ document.getElementById("playPause").addEventListener("click", event => {
   playing = !playing;
   event.target.textContent = playing ? "Pause" : "Play";
 });
+document.getElementById("resetOverviewView").addEventListener("click", () => resetView("overview"));
+document.getElementById("resetPlaybackView").addEventListener("click", () => resetView("playback"));
 
 function animate(timestamp) {
   if (!lastTimestamp) {
@@ -753,7 +1034,10 @@ function animate(timestamp) {
 }
 
 renderStats();
+renderOptions();
 syncControls();
+bindCanvasPanZoom("overview", "overview");
+bindCanvasPanZoom("playback", "playback");
 if (mapImage.complete || !payload.map.image) {
   drawAll();
 } else {

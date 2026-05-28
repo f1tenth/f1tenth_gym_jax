@@ -100,7 +100,7 @@ class MultiAgentEnv(object):
 
     @property
     def agent_classes(self) -> dict:
-        """Returns a dictionary with agent classes, used in environments with hetrogenous agents.
+        """Returns a dictionary with agent classes, used in environments with heterogeneous agents.
 
         Format:
             agent_base_name: [agent_base_name_1, agent_base_name_2, ...]

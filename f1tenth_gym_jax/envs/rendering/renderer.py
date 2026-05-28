@@ -372,7 +372,7 @@ class TrajRenderer:
         print(f"rewind to {self.current_step}")
 
     def fast_forward(self):
-        # fast foward playback 1 second
+        # fast forward playback 1 second
         self.current_step = int((self.current_step + self.render_fps) % self.num_steps)
         print(f"fast forward to step {self.current_step}")
 

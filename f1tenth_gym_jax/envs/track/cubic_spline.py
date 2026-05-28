@@ -122,7 +122,7 @@ class CubicSplineND:
         self.s = self.__calc_s(self.points[:, 0], self.points[:, 1])
         self.s_jax = jnp.array(self.s)
         # Use scipy CubicSpline to interpolate the points with periodic boundary conditions
-        # This is necesaxsry to ensure the path is continuous
+        # This is necessary to ensure the path is continuous
         self.spline = interpolate.CubicSpline(self.s, self.points, bc_type="periodic")
         self.spline_x_jax = jnp.array(self.spline.x)
         self.spline_c_jax = jnp.array(self.spline.c)

@@ -139,27 +139,32 @@ def make(env_id: str, **env_kwargs):
         timestep_ratio,
         max_steps,
     ) = _parse_scenario(env_id)
+    param_kwargs = {
+        "map_name": map_name,
+        "produce_scans": produce_scan,
+        "collision_on": collision_on,
+        "reward_type": reward_type,
+        "longitudinal_action_type": control_type[0],
+        "steering_action_type": control_type[1],
+        "timestep": Param().timestep,
+        "timestep_ratio": timestep_ratio,
+        "max_steps": max_steps,
+    }
+    param_kwargs.update(env_kwargs)
+
     available_maps = list_available_maps()
-    if map_name not in available_maps:
+    if param_kwargs["map_name"] not in available_maps:
         raise ValueError(
-            f"{map_name} is not a registered map, choose from {available_maps}."
+            f"{param_kwargs['map_name']} is not a registered map, choose from {available_maps}."
         )
-    if max_steps is None:
-        max_steps = int(90 / (0.1 * timestep_ratio))
+    if param_kwargs["max_steps"] is None:
+        param_kwargs["max_steps"] = int(
+            90 / (param_kwargs["timestep"] * param_kwargs["timestep_ratio"])
+        )
 
     env = F110Env(
         num_agents=num_agents,
-        params=Param(
-            map_name=map_name,
-            produce_scans=produce_scan,
-            collision_on=collision_on,
-            reward_type=reward_type,
-            longitudinal_action_type=control_type[0],
-            steering_action_type=control_type[1],
-            timestep_ratio=timestep_ratio,
-            max_steps=max_steps,
-            **env_kwargs,
-        ),
+        params=Param(**param_kwargs),
     )
 
     return env

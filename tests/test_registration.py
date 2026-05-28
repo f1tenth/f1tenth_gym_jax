@@ -1,6 +1,6 @@
 import unittest
 
-from f1tenth_gym_jax.registration import _parse_scenario
+from f1tenth_gym_jax.registration import _parse_scenario, make
 
 
 class TestRegistration(unittest.TestCase):
@@ -62,3 +62,34 @@ class TestRegistration(unittest.TestCase):
             with self.subTest(scenario=scenario):
                 with self.assertRaises(ValueError):
                     _parse_scenario(scenario)
+
+    def test_make_uses_param_timestep_for_default_max_steps(self):
+        env = make(
+            "Spielberg_1_noscan_nocollision_progress_acceleration+steeringvelocity_10_v0_v0"
+        )
+
+        self.assertEqual(
+            env.params.max_steps,
+            int(90 / (env.params.timestep * env.params.timestep_ratio)),
+        )
+
+    def test_make_allows_param_keyword_overrides(self):
+        env = make(
+            "Spielberg_1_noscan_nocollision_progress_acceleration+steeringvelocity_1_v0_v0",
+            timestep=0.02,
+            observe_others=False,
+            mu=1.0,
+        )
+
+        self.assertEqual(env.params.timestep, 0.02)
+        self.assertFalse(env.params.observe_others)
+        self.assertEqual(env.params.mu, 1.0)
+        self.assertEqual(env.params.max_steps, int(90 / env.params.timestep))
+
+    def test_make_keeps_explicit_max_steps(self):
+        env = make(
+            "Spielberg_1_noscan_nocollision_progress_acceleration+steeringvelocity_1_42_v0",
+            timestep=0.02,
+        )
+
+        self.assertEqual(env.params.max_steps, 42)

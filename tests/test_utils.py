@@ -30,6 +30,49 @@ class TestUtilities(unittest.TestCase):
         np.testing.assert_allclose(restored["agent_0"], values["agent_0"])
         np.testing.assert_allclose(restored["agent_1"], values["agent_1"])
 
+    def test_batchify_rejects_invalid_shape_inputs(self):
+        agents = ["agent_0", "agent_1"]
+        num_envs = 3
+        values = {
+            "agent_0": jnp.arange(6, dtype=jnp.float32).reshape(num_envs, 2),
+            "agent_1": jnp.arange(6, 12, dtype=jnp.float32).reshape(num_envs, 2),
+        }
+
+        with self.assertRaisesRegex(ValueError, "num_actors"):
+            batchify(values, agents, 0)
+
+        with self.assertRaisesRegex(ValueError, "num_actors"):
+            batchify(values, agents, num_envs)
+
+        with self.assertRaisesRegex(ValueError, "input keys"):
+            batchify({"agent_0": values["agent_0"]}, agents, num_envs * len(agents))
+
+        with self.assertRaisesRegex(ValueError, "agent_list"):
+            batchify({}, [], num_envs)
+
+        values_with_done_key = {**values, "__all__": jnp.zeros((num_envs,))}
+        np.testing.assert_allclose(
+            batchify(values_with_done_key, agents, num_envs * len(agents)),
+            batchify(values, agents, num_envs * len(agents)),
+        )
+
+    def test_unbatchify_rejects_invalid_shape_inputs(self):
+        agents = ["agent_0", "agent_1"]
+        num_envs = 3
+        batched = jnp.arange(12, dtype=jnp.float32).reshape(num_envs * len(agents), 2)
+
+        with self.assertRaisesRegex(ValueError, "num_envs"):
+            unbatchify(batched, agents, 0, len(agents))
+
+        with self.assertRaisesRegex(ValueError, "num_agents"):
+            unbatchify(batched, agents, num_envs, 0)
+
+        with self.assertRaisesRegex(ValueError, "num_agents"):
+            unbatchify(batched, agents, num_envs, 3)
+
+        with self.assertRaisesRegex(ValueError, "batch size"):
+            unbatchify(batched[:-1], agents, num_envs, len(agents))
+
     def test_log_wrapper_adds_episode_info(self):
         env = LogWrapper(
             make(

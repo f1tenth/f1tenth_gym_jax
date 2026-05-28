@@ -103,13 +103,35 @@ class Param:
 def batchify(
     x: Mapping[str, chex.Array], agent_list: Sequence[str], num_actors: int
 ) -> chex.Array:
+    if num_actors < 1:
+        raise ValueError("num_actors must be positive.")
+    if not agent_list:
+        raise ValueError("agent_list must not be empty.")
+    missing_agents = set(agent_list) - set(x)
+    if missing_agents:
+        raise ValueError("input keys must include agent_list.")
+
     x = jnp.stack([x[a] for a in agent_list])
+    expected_actors = x.shape[0] * x.shape[1]
+    if num_actors != expected_actors:
+        raise ValueError(
+            f"num_actors must equal len(agent_list) * num_envs ({expected_actors})."
+        )
     return x.reshape((num_actors, -1))
 
 
 def unbatchify(
     x: jnp.ndarray, agent_list: Sequence[str], num_envs: int, num_agents: int
 ) -> Dict[str, chex.Array]:
+    if num_envs < 1:
+        raise ValueError("num_envs must be positive.")
+    if num_agents < 1:
+        raise ValueError("num_agents must be positive.")
+    if len(agent_list) != num_agents:
+        raise ValueError("num_agents must equal len(agent_list).")
+    if x.shape[0] != num_agents * num_envs:
+        raise ValueError("input batch size must equal num_agents * num_envs.")
+
     x = x.reshape((num_agents, num_envs, -1))
     return {a: x[i] for i, a in enumerate(agent_list)}
 

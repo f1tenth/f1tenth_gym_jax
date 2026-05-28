@@ -60,3 +60,23 @@ class TestRenderer(unittest.TestCase):
             self.assertIsNone(renderer.render(trajectory))
         finally:
             renderer.close()
+
+    def test_play_pause_keeps_timer_state_in_sync(self):
+        env, TrajRenderer = self._make_renderer_inputs()
+
+        renderer = TrajRenderer(env, render_mode="rgb_array")
+        try:
+            self.assertTrue(renderer.playing)
+            self.assertTrue(renderer.t.isActive())
+
+            renderer.play_pause()
+
+            self.assertFalse(renderer.playing)
+            self.assertFalse(renderer.t.isActive())
+
+            renderer.play_pause()
+
+            self.assertTrue(renderer.playing)
+            self.assertTrue(renderer.t.isActive())
+        finally:
+            renderer.close()

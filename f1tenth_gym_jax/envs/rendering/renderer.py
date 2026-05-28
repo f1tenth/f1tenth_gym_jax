@@ -212,7 +212,7 @@ class TrajRenderer:
         self.time_renderer.setPos(1, 0)
 
         # playback control states
-        self.playing = False
+        self.playing = True
         self.speed = 1
         self.focus_on = (
             0  # 0: agent 0,  1: agent 1, 2: agent 2, 3: agent 3, ... , n: map
@@ -363,8 +363,10 @@ class TrajRenderer:
     def play_pause(self):
         """Toggle play/pause"""
         self.playing = not self.playing
-        self.t.stop() if self.playing else self.t.start()
-        print("play pause")
+        if self.playing:
+            self.t.start()
+        else:
+            self.t.stop()
 
     def rewind(self):
         # rewind playback 1 second
@@ -565,5 +567,7 @@ class TrajRenderer:
         """
         Close the rendering environment.
         """
+        self.t.stop()
+        self.playing = False
         self.app.exit()
         self.app.closeAllWindows()

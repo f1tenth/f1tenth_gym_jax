@@ -7,8 +7,9 @@ environment.
 Using uv
 --------
 
-``uv`` is the supported install path for this repository. It reads
-``uv.lock`` and the git source configured for ``jax-pf``.
+``uv`` is the official install path for this repository. Use Python 3.11, 3.12,
+or 3.13. ``uv`` reads ``uv.lock``, the git source configured for ``jax-pf``,
+and the dependency overrides required to keep the JAX stack consistent.
 
 .. code:: bash
 
@@ -23,7 +24,10 @@ Install optional dependencies for specific workflows:
     uv sync --extra examples  # plotting, web dashboard, and track generation examples
     uv sync --extra rl        # PPO training/evaluation dependencies
     uv sync --extra docs      # Sphinx documentation build
-    uv sync --extra cuda      # JAX CUDA 12 support
+    uv sync --extra cuda      # JAX CUDA 13 support
+
+The default install uses CPU JAX wheels. The ``cuda`` extra follows JAX's
+``jax[cuda13]`` packaging and requires a compatible Linux NVIDIA driver.
 
 Documentation
 -------------
@@ -36,20 +40,6 @@ the same Sphinx project with ``uv``.
 
     uv sync --extra docs
     uv run sphinx-build -W -b html docs docs/_build/html
-
-Using pip
----------
-
-Plain ``pip install -e .`` does not read ``[tool.uv.sources]`` from
-``pyproject.toml``. If you need a pip-only workflow, install the git-backed
-``jax-pf`` dependency first, then install this package.
-
-.. code:: bash
-
-    git clone https://github.com/f1tenth/f1tenth_gym_jax.git
-    cd f1tenth_gym_jax
-    python -m pip install "jax-pf @ git+https://github.com/hzheng40/jax_pf"
-    python -m pip install -e .
 
 Docker
 ------

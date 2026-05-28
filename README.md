@@ -13,7 +13,7 @@ The project is under active development.
 
 ## Quickstart
 
-Install the package in an isolated environment:
+Install the package in an isolated Python 3.11-3.13 environment with `uv`:
 
 ```bash
 git clone https://github.com/f1tenth/f1tenth_gym_jax.git
@@ -21,8 +21,9 @@ cd f1tenth_gym_jax
 uv sync
 ```
 
-`uv` is the supported install path because it resolves the git-backed
-`jax-pf` dependency recorded in `uv.lock`.
+`uv` is the official install path for this repository because it resolves the
+git-backed `jax-pf` dependency and applies the dependency overrides recorded in
+`pyproject.toml` and `uv.lock`.
 
 Optional extras are split by workflow:
 
@@ -30,8 +31,11 @@ Optional extras are split by workflow:
 uv sync --extra examples  # plotting, web dashboard, and track generation examples
 uv sync --extra rl        # PPO training/evaluation dependencies
 uv sync --extra docs      # Sphinx documentation build
-uv sync --extra cuda      # JAX CUDA 12 support
+uv sync --extra cuda      # JAX CUDA 13 support
 ```
+
+The default install uses CPU JAX wheels. The `cuda` extra follows JAX's
+`jax[cuda13]` packaging and requires a compatible Linux NVIDIA driver.
 
 Run a minimal rollout:
 

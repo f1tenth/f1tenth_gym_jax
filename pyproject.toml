@@ -12,14 +12,14 @@ authors = [
     { name = "Matthew O'Kelly" },
     { name = "Aman Sinha" },
 ]
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.11,<3.14"
 readme = "README.md"
 license = "MIT"
 maintainers = [{ name = "Hongrui Zheng" }]
 dependencies = [
     "PyYAML>=6.0.2,<7",
     "requests>=2.32.4,<3",
-    "jax>=0.6.2,<0.7",
+    "jax>=0.7.2,<0.8",
     "scipy>=1.13,<2",
     "flax>=0.10.6,<0.11",
     "chex>=0.1.89,<0.2",
@@ -34,10 +34,11 @@ Documentation = "https://f1tenth-gym-jax.readthedocs.io/"
 
 [project.optional-dependencies]
 cuda = [
-    "jax[cuda12]>=0.6.2,<0.7",
+    "jax[cuda13]>=0.7.2,<0.8",
+    "jax-cuda13-plugin[with-cuda]>=0.7.2,<0.8; sys_platform == 'linux'",
 ]
 rl = [
-    "distrax>=0.1.5",
+    "distrax>=0.1.7",
     "optax>=0.2.5",
     "safetensors>=0.6.2",
     "tqdm>=4.67.1",
@@ -78,6 +79,9 @@ dev = [
 ]
 
 [tool.uv]
+override-dependencies = [
+    "jax>=0.7.2,<0.8",
+]
 
 [tool.uv.sources]
 jax-pf = { git = "https://github.com/hzheng40/jax_pf" }

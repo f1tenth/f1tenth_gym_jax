@@ -13,6 +13,7 @@ class TestMetadata(unittest.TestCase):
         metadata = tomllib.loads(pyproject.read_text())["project"]
 
         self.assertEqual(f1tenth_gym_jax.__version__, metadata["version"])
+        self.assertEqual(metadata["requires-python"], ">=3.11,<3.14")
 
     def test_documentation_links_target_readthedocs(self):
         repo_root = pathlib.Path(__file__).parent.parent
@@ -126,6 +127,56 @@ class TestMetadata(unittest.TestCase):
         self.assertFalse(
             any(dependency.startswith("matplotlib") for dependency in dev_dependencies)
         )
+
+    def test_rl_extra_uses_jax7_compatible_distrax(self):
+        pyproject = pathlib.Path(__file__).parent.parent / "pyproject.toml"
+        metadata = tomllib.loads(pyproject.read_text())
+        rl_dependencies = metadata["project"]["optional-dependencies"]["rl"]
+
+        self.assertIn("distrax>=0.1.7", rl_dependencies)
+
+    def test_cuda_extra_uses_jax_cuda13(self):
+        repo_root = pathlib.Path(__file__).parent.parent
+        metadata = tomllib.loads((repo_root / "pyproject.toml").read_text())
+        cuda_dependencies = metadata["project"]["optional-dependencies"]["cuda"]
+        uv_overrides = metadata["tool"]["uv"]["override-dependencies"]
+        lock_text = (repo_root / "uv.lock").read_text()
+        docs_text = "\n".join(
+            [
+                (repo_root / "README.md").read_text(),
+                (repo_root / "docs" / "installation.rst").read_text(),
+            ]
+        )
+
+        self.assertTrue(
+            any(
+                dependency.startswith("jax[cuda13]") for dependency in cuda_dependencies
+            )
+        )
+        self.assertTrue(
+            any(
+                dependency.startswith("jax-cuda13-plugin[with-cuda]")
+                for dependency in cuda_dependencies
+            )
+        )
+        self.assertIn("jax>=0.7.2,<0.8", metadata["project"]["dependencies"])
+        self.assertIn("jax>=0.7.2,<0.8", uv_overrides)
+        self.assertIn('name = "jax-cuda13-plugin"', lock_text)
+        self.assertNotIn("jax-cuda12", lock_text)
+        self.assertNotIn("jax[cuda12]", "\n".join(cuda_dependencies))
+        self.assertIn("CUDA 13", docs_text)
+        self.assertNotIn("CUDA 12", docs_text)
+
+    def test_uv_is_only_documented_project_install_workflow(self):
+        repo_root = pathlib.Path(__file__).parent.parent
+        installation = (repo_root / "docs" / "installation.rst").read_text()
+        readme = (repo_root / "README.md").read_text()
+        install_docs = "\n".join([installation, readme])
+
+        self.assertIn("official install path", install_docs)
+        self.assertNotIn("Using pip", installation)
+        self.assertNotIn("pip install -e .", install_docs)
+        self.assertNotIn("python -m pip install -e", install_docs)
 
     def test_readthedocs_uses_sphinx_with_uv_docs_extra(self):
         repo_root = pathlib.Path(__file__).parent.parent

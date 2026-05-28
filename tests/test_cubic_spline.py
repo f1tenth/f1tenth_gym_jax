@@ -1,5 +1,6 @@
 import unittest
 
+import jax
 import numpy as np
 
 from f1tenth_gym_jax.envs.track import cubic_spline
@@ -24,6 +25,27 @@ class TestCubicSpline(unittest.TestCase):
         self.assertAlmostEqual(track.calc_curvature(np.pi), 1, places=3)
         self.assertAlmostEqual(track.calc_curvature(3 * np.pi / 2), 1, places=3)
 
+    def test_calc_curvature_jax_matches_numerical_curvature(self):
+        track = self._circle_track()
+
+        for s in (0, np.pi / 2, np.pi, 3 * np.pi / 2):
+            with self.subTest(s=s):
+                self.assertAlmostEqual(
+                    float(track.calc_curvature_jax(s)),
+                    track.calc_curvature(s),
+                    places=3,
+                )
+
+    def test_calc_curvature_jax_supports_jit_without_provided_curvature(self):
+        track = self._circle_track()
+        calc_curvature_jit = jax.jit(track.calc_curvature_jax)
+
+        self.assertAlmostEqual(
+            float(calc_curvature_jit(np.pi / 2)),
+            track.calc_curvature(np.pi / 2),
+            places=3,
+        )
+
     def test_calc_yaw(self):
         track = self._circle_track()
         # Test the yaw at the four corners of the circle
@@ -32,6 +54,17 @@ class TestCubicSpline(unittest.TestCase):
         self._assert_angles_close(track.calc_yaw(np.pi / 2), np.pi)
         self._assert_angles_close(track.calc_yaw(np.pi), 3 * np.pi / 2)
         self._assert_angles_close(track.calc_yaw(3 * np.pi / 2), 0)
+
+    def test_calc_yaw_jax_matches_numerical_yaw(self):
+        track = self._circle_track()
+
+        for s in (0, np.pi / 2, np.pi, 3 * np.pi / 2):
+            with self.subTest(s=s):
+                self._assert_angles_close(
+                    float(track.calc_yaw_jax(s)),
+                    track.calc_yaw(s),
+                    places=3,
+                )
 
     def test_calc_position(self):
         track = self._circle_track()

@@ -145,6 +145,18 @@ class CubicSplineND:
         point = vec.dot(exp_x)
         return point
 
+    @partial(jax.jit, static_argnums=(0))
+    def predict_first_derivative_with_spline_jax(self, point, segment, state_index=0):
+        dx = point - self.spline_x_jax[segment]
+        vec = self.spline_c_jax[:, segment, state_index]
+        return 3 * vec[0] * dx**2 + 2 * vec[1] * dx + vec[2]
+
+    @partial(jax.jit, static_argnums=(0))
+    def predict_second_derivative_with_spline_jax(self, point, segment, state_index=0):
+        dx = point - self.spline_x_jax[segment]
+        vec = self.spline_c_jax[:, segment, state_index]
+        return 6 * vec[0] * dx + 2 * vec[1]
+
     def find_segment_for_x(self, x):
         # Find the segment of the spline that x is in
         segment = np.searchsorted(self.spline.x, x, side="right") - 1
@@ -264,13 +276,15 @@ class CubicSplineND:
         k : float
             curvature for given s.
         """
+        segment = self.find_segment_for_x_jax(s)
         if self.ks is None:  # curvature was not provided => numerical calculation
-            dx, dy = self.spline(s, 1)[:2]
-            ddx, ddy = self.spline(s, 2)[:2]
+            dx = self.predict_first_derivative_with_spline_jax(s, segment, 0)
+            dy = self.predict_first_derivative_with_spline_jax(s, segment, 1)
+            ddx = self.predict_second_derivative_with_spline_jax(s, segment, 0)
+            ddy = self.predict_second_derivative_with_spline_jax(s, segment, 1)
             k = (ddy * dx - ddx * dy) / ((dx**2 + dy**2) ** (3 / 2))
             return k
         else:
-            segment = self.find_segment_for_x_jax(s)
             k = self.predict_with_spline_jax(s, segment, 4)[0]
             return k
 
@@ -335,10 +349,14 @@ class CubicSplineND:
     @partial(jax.jit, static_argnums=(0))
     def calc_yaw_jax(self, s: float) -> Optional[float]:
         segment = self.find_segment_for_x_jax(s)
-        cos = self.predict_with_spline_jax(s, segment, 2)[0]
-        sin = self.predict_with_spline_jax(s, segment, 3)[0]
-        yaw = jnp.arctan2(sin, cos)
-        return yaw
+        if self.psis is None:  # yaw was not provided => numerical calculation
+            dx = self.predict_first_derivative_with_spline_jax(s, segment, 0)
+            dy = self.predict_first_derivative_with_spline_jax(s, segment, 1)
+            return jnp.arctan2(dy, dx)
+        else:
+            cos = self.predict_with_spline_jax(s, segment, 2)[0]
+            sin = self.predict_with_spline_jax(s, segment, 3)[0]
+            return jnp.arctan2(sin, cos)
 
     def calc_arclength(self, x: float, y: float, s_guess=0.0) -> tuple[float, float]:
         """

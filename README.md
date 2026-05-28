@@ -20,6 +20,14 @@ cd f1tenth_gym_jax
 uv sync
 ```
 
+Optional extras are split by workflow:
+
+```bash
+uv sync --extra examples  # plotting, video, and track generation examples
+uv sync --extra rl        # PPO training/evaluation dependencies
+uv sync --extra docs      # Sphinx documentation build
+```
+
 Run a minimal rollout:
 
 ```python

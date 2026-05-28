@@ -20,6 +20,7 @@ dependencies = [
     "PyYAML>=6.0.2,<7",
     "requests>=2.32.4,<3",
     "jax>=0.6.2,<0.7",
+    "scipy>=1.13,<2",
     "flax>=0.10.6,<0.11",
     "chex>=0.1.89,<0.2",
     "pyqtgraph>=0.13.7,<0.14",
@@ -49,6 +50,10 @@ examples = [
     "matplotlib>=3.8.2,<4",
     "opencv-python>=4.10.0,<5",
     "shapely>=2.0.0,<3",
+]
+docs = [
+    "sphinx>=7,<9",
+    "sphinx-rtd-theme>=2,<4",
 ]
 
 [tool.pytest.ini_options]

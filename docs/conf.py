@@ -1,7 +1,7 @@
 # flake8: noqa
 import os
 
-import sphinx_rtd_theme
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 source_suffix = ".rst"
 source_encoding = "utf-8-sig"
@@ -19,7 +19,6 @@ is_i18n = tags.has("i18n")
 # -- Theme -------------------------------------------------------------------
 on_rtd = os.environ.get("READTHEDOCS", None) == "True"
 html_theme = "sphinx_rtd_theme"
-html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 if on_rtd:
     using_rtd_theme = True
 html_theme_options = {
@@ -42,9 +41,6 @@ html_context = {
 
 html_favicon = "assets/f1_stickers_02.png"
 
-html_css_files = ["css/custom.css"]
-
-html_js_files = ["css/custom.js"]
 html_logo = "assets/f1tenth_gym.svg"
 
 # -- Project information -----------------------------------------------------
@@ -63,10 +59,12 @@ version = "latest"
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ["breathe", "sphinx_rtd_theme", "sphinx.ext.autosectionlabel"]
-
-# Breathe configuration
-breathe_projects = {"f1tenth_gym_jax": "./xml"}
+extensions = [
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosectionlabel",
+    "sphinx.ext.napoleon",
+    "sphinx_rtd_theme",
+]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -75,8 +73,3 @@ templates_path = ["_templates"]
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
-
-# Add any paths that contain custom static files (such as style sheets) here,
-# relative to this directory. They are copied after the builtin static files,
-# so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ["_static"]

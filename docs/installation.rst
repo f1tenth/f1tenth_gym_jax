@@ -13,6 +13,14 @@ Using uv
     cd f1tenth_gym_jax
     uv sync
 
+Install optional dependencies for specific workflows:
+
+.. code:: bash
+
+    uv sync --extra examples  # plotting, video, and track generation examples
+    uv sync --extra rl        # PPO training/evaluation dependencies
+    uv sync --extra docs      # Sphinx documentation build
+
 Using pip
 ---------
 

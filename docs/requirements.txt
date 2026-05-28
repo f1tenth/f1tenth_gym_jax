@@ -1,1 +1,2 @@
-breathe
+sphinx>=7,<9
+sphinx-rtd-theme>=2,<4

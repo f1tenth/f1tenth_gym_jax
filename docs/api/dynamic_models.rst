@@ -3,5 +3,7 @@ Dynamic Models
 
 This file contains JAX-compatible dynamic model functions.
 
-.. doxygenfile:: dynamic_models.py
-    :project: f1tenth_gym_jax
+.. automodule:: f1tenth_gym_jax.envs.dynamic_models
+    :members:
+    :undoc-members:
+    :show-inheritance:

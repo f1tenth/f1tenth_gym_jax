@@ -1,9 +1,11 @@
 import importlib.util
 import pathlib
+import tempfile
 import unittest
 
 import jax
 import numpy as np
+import yaml
 
 from f1tenth_gym_jax import make
 
@@ -37,3 +39,51 @@ class TestExamples(unittest.TestCase):
             rtol=1e-6,
             atol=1e-5,
         )
+
+    def test_video_recording_writes_requested_gif(self):
+        video_recording = _load_example_module("video_recording")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = pathlib.Path(tmpdir) / "rollout.gif"
+            frames = video_recording.record_gif(num_steps=1, output=output)
+
+            self.assertEqual(frames, 1)
+            self.assertTrue(output.exists())
+            self.assertGreater(output.stat().st_size, 0)
+
+    def test_random_trackgen_uses_yaml_resolution_for_centerline_scale(self):
+        random_trackgen = _load_example_module("random_trackgen")
+        track = np.array(
+            [
+                [0.0, 0.0],
+                [10.0, 0.0],
+                [10.0, 10.0],
+                [0.0, 10.0],
+                [0.0, 0.0],
+            ]
+        )
+        track_int = track + np.array([1.0, 1.0])
+        track_ext = track - np.array([1.0, 1.0])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            outdir = pathlib.Path(tmpdir)
+            random_trackgen.convert_track(
+                track, track_int, track_ext, "RandomTrack0", outdir
+            )
+
+            track_dir = outdir / "RandomTrack0"
+            with (track_dir / "RandomTrack0.yaml").open() as yaml_file:
+                metadata = yaml.safe_load(yaml_file)
+            centerline = np.loadtxt(
+                track_dir / "RandomTrack0_centerline.csv",
+                delimiter=",",
+                comments="#",
+            )
+
+            self.assertEqual(metadata["resolution"], random_trackgen.MAP_RESOLUTION)
+            self.assertTrue((track_dir / metadata["image"]).exists())
+            np.testing.assert_allclose(centerline[0, :2], np.array([0.0, 0.0]))
+            np.testing.assert_allclose(
+                centerline[:, 2:],
+                random_trackgen.TRACK_WIDTH * random_trackgen.MAP_RESOLUTION,
+            )

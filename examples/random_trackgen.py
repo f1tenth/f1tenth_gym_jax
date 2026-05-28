@@ -39,12 +39,17 @@ import numpy as np
 import shapely.geometry as shp
 
 TRACK_WIDTH = 10.0
+MAP_RESOLUTION = 0.0625
 
 
 def main(args):
     n_maps = args.n_maps
     outdir = args.outdir
     seed = args.seed
+    max_attempts = args.max_attempts
+
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be positive.")
 
     np.random.seed(seed)
 
@@ -52,17 +57,22 @@ def main(args):
 
     for i in range(n_maps):
         track_name = f"RandomTrack{i}"
-        while True:
+        for attempt in range(1, max_attempts + 1):
             try:
                 print(f"[info] creating track {track_name}")
-                track, track_int, track_ext = create_track()
+                generated_track = create_track()
+                if generated_track is False:
+                    raise RuntimeError("track generator produced an open loop")
+                track, track_int, track_ext = generated_track
                 convert_track(track, track_int, track_ext, track_name, outdir)
                 print(f"[info] saved track {track_name} in {outdir / track_name}/")
                 break
-            except Exception as _:  # noqa: F841
-                print("[error] failed to create track. Retrying...")
-                continue
-            print()
+            except Exception as exc:
+                print(f"[error] failed to create track on attempt {attempt}: {exc}")
+        else:
+            raise RuntimeError(
+                f"failed to create {track_name} after {max_attempts} attempts"
+            )
 
 
 def create_track():
@@ -219,8 +229,8 @@ def convert_track(track, track_int, track_ext, track_name, outdir):
 
     xy_pixels = xy_pixels - np.array([[origin_x_pix, origin_y_pix]])
 
-    map_origin_x = -origin_x_pix * 0.05
-    map_origin_y = -origin_y_pix * 0.05
+    map_origin_x = -origin_x_pix * MAP_RESOLUTION
+    map_origin_y = -origin_y_pix * MAP_RESOLUTION
 
     track_filepath = track_dir / f"{track_name}.png"
     plt.savefig(track_filepath, dpi=80)
@@ -233,22 +243,22 @@ def convert_track(track, track_int, track_ext, track_name, outdir):
 
     # create yaml file
     yaml_filepath = track_dir / f"{track_name}.yaml"
-    with open(yaml_filepath, "w") as yaml:
-        yaml.write(f"image: {track_name}.png\n")
-        yaml.write("resolution: 0.062500\n")
-        yaml.write(f"origin: [{map_origin_x},{map_origin_y},0.000000]\n")
-        yaml.write("negate: 0\n")
-        yaml.write("occupied_thresh: 0.45\n")
-        yaml.write("free_thresh: 0.196\n")
+    with open(yaml_filepath, "w") as yaml_file:
+        yaml_file.write(f"image: {track_name}.png\n")
+        yaml_file.write(f"resolution: {MAP_RESOLUTION:.6f}\n")
+        yaml_file.write(f"origin: [{map_origin_x},{map_origin_y},0.000000]\n")
+        yaml_file.write("negate: 0\n")
+        yaml_file.write("occupied_thresh: 0.45\n")
+        yaml_file.write("free_thresh: 0.196\n")
 
     # Saving centerline as a csv
     centerline_filepath = track_dir / f"{track_name}_centerline.csv"
-    width_m = 0.05 * TRACK_WIDTH
+    width_m = MAP_RESOLUTION * TRACK_WIDTH
     with open(centerline_filepath, "w") as waypoints_csv:
         waypoints_csv.write("# x,y,w_left,w_right\n")
         for row in xy_pixels:
             waypoints_csv.write(
-                f"{0.05 * row[0]}, {0.05 * row[1]}, {width_m}, {width_m}\n"
+                f"{MAP_RESOLUTION * row[0]}, {MAP_RESOLUTION * row[1]}, {width_m}, {width_m}\n"
             )
 
 
@@ -264,6 +274,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--outdir", type=pathlib.Path, default="./maps", help="Out directory"
+    )
+    parser.add_argument(
+        "--max-attempts",
+        type=int,
+        default=100,
+        help="Maximum generation attempts per map before failing.",
     )
     args = parser.parse_args()
 

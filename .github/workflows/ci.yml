@@ -164,3 +164,4 @@ jobs:
           uv run python examples/run_in_empty_track.py --steps 2 --no-render
           uv run python examples/waypoint_follow.py --num-agents 1 --num-envs 1 --steps 2 --no-render
           uv run python examples/mppi_example.py --num-agents 1 --num-envs 1 --steps 1 --num-samples 2 --horizon 2 --no-plots --no-render
+          uv run python examples/video_recording.py --steps 1 --output /tmp/f1tenth_gym_jax_rollout.gif

@@ -74,6 +74,14 @@ def _ppo_artifact_pairs() -> dict[tuple[str, str], set[str]]:
     return artifacts
 
 
+_BANNED_STALE_EXAMPLE_FRAGMENTS = (
+    "f110_gym",
+    "gym.make",
+    "gymnasium",
+    "jax.random.PRNGKey",
+)
+
+
 class TestExamples(unittest.TestCase):
     def test_ppo_train_config_default_model_files_are_checked_in(self):
         defaults = _read_train_config_defaults()
@@ -107,12 +115,6 @@ class TestExamples(unittest.TestCase):
 
     def test_notebook_examples_use_current_jax_environment_api(self):
         examples_dir = pathlib.Path(__file__).parent.parent / "examples"
-        banned_fragments = (
-            "f110_gym",
-            "gym.make",
-            "gymnasium",
-            "jax.random.PRNGKey",
-        )
 
         for notebook_name in ("benchmark_example.ipynb", "rendering_example.ipynb"):
             with self.subTest(notebook=notebook_name):
@@ -126,13 +128,33 @@ class TestExamples(unittest.TestCase):
 
                 self.assertIn("from f1tenth_gym_jax import make", source)
                 self.assertIn("jax.random.key", source)
-                for fragment in banned_fragments:
+                for fragment in _BANNED_STALE_EXAMPLE_FRAGMENTS:
                     self.assertNotIn(fragment, source)
 
                 for cell in notebook["cells"]:
                     if cell["cell_type"] == "code":
                         self.assertIsNone(cell["execution_count"])
                         self.assertEqual(cell["outputs"], [])
+
+    def test_python_examples_use_current_jax_environment_api(self):
+        examples_dir = pathlib.Path(__file__).parent.parent / "examples"
+        environment_examples = {
+            "eval_ppo_example.py",
+            "mppi_example.py",
+            "run_in_empty_track.py",
+            "train_ppo_example.py",
+            "video_recording.py",
+            "waypoint_follow.py",
+        }
+
+        for example_name in environment_examples:
+            with self.subTest(example=example_name):
+                source = (examples_dir / example_name).read_text()
+
+                self.assertIn("from f1tenth_gym_jax import make", source)
+                self.assertIn("make(", source)
+                for fragment in _BANNED_STALE_EXAMPLE_FRAGMENTS:
+                    self.assertNotIn(fragment, source)
 
     def test_mppi_waypoint_geometry_uses_raceline_arclength_and_xy(self):
         mppi_example = _load_example_module("mppi_example")

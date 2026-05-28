@@ -99,7 +99,7 @@ class MPPI:
         self,
         config: MPPIConfig,
         env: F110Env,
-        rng: jax.random.PRNGKey,
+        rng: chex.PRNGKey,
     ):
         self.config = config
         self.env = env

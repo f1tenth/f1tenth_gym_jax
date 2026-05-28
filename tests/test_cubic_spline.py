@@ -52,6 +52,23 @@ class TestCubicSpline(unittest.TestCase):
             )
         )
 
+    def test_calc_position_uses_actual_spline_segments(self):
+        track = cubic_spline.CubicSplineND(
+            np.array([0.0, 0.2, 3.0, 3.5]),
+            np.array([0.0, 2.0, 2.2, 0.0]),
+        )
+
+        for s in (2.2, 3.0, 5.0):
+            with self.subTest(s=s):
+                expected = np.asarray(track.spline(s)[:2])
+                np.testing.assert_allclose(track.calc_position(s), expected)
+                np.testing.assert_allclose(
+                    np.asarray(track.calc_position_jax(s)),
+                    expected,
+                    rtol=1e-6,
+                    atol=1e-6,
+                )
+
     def test_calc_arclength(self):
         track = self._circle_track()
         # Test the arclength at the four corners of the circle

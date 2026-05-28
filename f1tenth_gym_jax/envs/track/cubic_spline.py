@@ -147,16 +147,14 @@ class CubicSplineND:
 
     def find_segment_for_x(self, x):
         # Find the segment of the spline that x is in
-        return (x / self.spline.x[-1] * (len(self.spline_x_jax) - 2)).astype(int)
-        # print(np.searchsorted(self.spline.x, x, side='right') - 1)
-        # return np.searchsorted(self.spline.x, x, side='right') - 1
+        segment = np.searchsorted(self.spline.x, x, side="right") - 1
+        return np.clip(segment, 0, len(self.spline.x) - 2)
 
     @partial(jax.jit, static_argnums=(0))
     def find_segment_for_x_jax(self, x):
         # Find the segment of the spline that x is in
-        # print((x / self.spline_x_jax[-1] * (len(self.spline_x_jax) - 2)).astype(int))
-        return (x / self.spline_x_jax[-1] * (len(self.spline_x_jax) - 2)).astype(int)
-        # return jnp.searchsorted(self.spline_x_jax, x, side='right') - 1
+        segment = jnp.searchsorted(self.spline_x_jax, x, side="right") - 1
+        return jnp.clip(segment, 0, self.spline_x_jax.shape[0] - 2)
 
     def __calc_s(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         """

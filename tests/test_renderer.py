@@ -79,6 +79,21 @@ class TestRenderer(unittest.TestCase):
             self.assertEqual(len(payload["trajectory"]), 2)
             self.assertEqual(len(payload["rolloutStats"]), 2)
 
+    def test_default_layout_preserves_short_step_major_batches(self):
+        env, trajectory = self._make_renderer_inputs()
+        short_batch = np.repeat(trajectory[:1], 3, axis=1)
+        short_batch[:, 1, :, 0] += 1.0
+        short_batch[:, 2, :, 0] += 2.0
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = pathlib.Path(tmpdir) / "short-batch.html"
+            WebRenderer(env).render(short_batch, output_path=output)
+
+            payload = _payload_from_dashboard(output)
+            self.assertEqual(payload["summary"]["rollouts"], 3)
+            self.assertEqual(payload["summary"]["steps"], 1)
+            self.assertEqual(len(payload["trajectory"]), 3)
+
     def test_web_dashboard_accepts_batch_major_layout(self):
         env, trajectory = self._make_renderer_inputs()
         batch_major = np.transpose(trajectory, (1, 0, 2, 3))

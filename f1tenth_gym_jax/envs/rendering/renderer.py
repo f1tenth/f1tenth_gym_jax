@@ -236,7 +236,7 @@ class WebRenderer:
         render_mode: str = "html",
         output_path: pathlib.Path | str = _DEFAULT_OUTPUT,
         open_browser: bool = False,
-        trajectory_layout: TrajectoryLayout = "auto",
+        trajectory_layout: TrajectoryLayout = "step_major",
     ):
         if render_mode == "rgb_array":
             raise ValueError(

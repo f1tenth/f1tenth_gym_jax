@@ -156,6 +156,28 @@ class TestExamples(unittest.TestCase):
                 for fragment in _BANNED_STALE_EXAMPLE_FRAGMENTS:
                     self.assertNotIn(fragment, source)
 
+    def test_empty_track_example_runs_without_rendering(self):
+        run_in_empty_track = _load_example_module("run_in_empty_track")
+
+        trajectory = run_in_empty_track.rollout(num_steps=1, render=False)
+
+        self.assertEqual(trajectory.shape, (1, 1, 1, 7))
+        self.assertTrue(np.isfinite(trajectory).all())
+
+    def test_waypoint_follow_example_runs_without_rendering(self):
+        waypoint_follow = _load_example_module("waypoint_follow")
+
+        _, all_runner_state = waypoint_follow.run_waypoint_follow(
+            num_agents=1,
+            num_envs=1,
+            num_steps=1,
+            render=False,
+        )
+        trajectory = np.asarray(all_runner_state[0].cartesian_states)
+
+        self.assertEqual(trajectory.shape, (1, 1, 1, 7))
+        self.assertTrue(np.isfinite(trajectory).all())
+
     def test_mppi_waypoint_geometry_uses_raceline_arclength_and_xy(self):
         mppi_example = _load_example_module("mppi_example")
         env = make(

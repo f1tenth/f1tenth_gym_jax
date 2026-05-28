@@ -52,7 +52,7 @@ class TrajRenderer:
         render_mode: str = "human",
     ):
         """
-        Initialize the Pygame renderer.
+        Initialize the PyQtGraph renderer.
 
         Parameters
         ----------

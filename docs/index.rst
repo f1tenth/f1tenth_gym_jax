@@ -2,7 +2,7 @@
   :width: 60
   :align: left
 
-F1TENTH Gym JAX Documentation 
+F1TENTH Gym JAX Documentation
 ================================================
 
 Overview
@@ -11,12 +11,12 @@ The F1TENTH Gym JAX environment is created for research that needs a determinist
 
 The environment is designed with determinism in mind. All agents' physics simulation are stepped simultaneously, and all randomness is controlled by explicit JAX PRNG keys. The explicit stepping API also enables ``jax.jit`` and ``jax.vmap`` workflows.
 
-Github repo: https://github.com/f1tenth/f1tenth_gym_jax
+GitHub repo: https://github.com/f1tenth/f1tenth_gym_jax
 
-Note that GitHub may have more up to date documentation than this page. If you see a mistake, please contribute a fix.
+Note that the GitHub repository contains the source for these docs. If you see a mistake, please contribute a fix.
 
-Example Usecases
-------------------
+Example Use Cases
+-----------------
 
 1. The gym environment is used as the backend for the F1TENTH virtual racing online competition at IROS 2020:
 

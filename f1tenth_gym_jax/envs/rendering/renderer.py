@@ -180,6 +180,7 @@ def _payload(
     metadata: Optional[dict[str, Any]],
     canvas_width: int,
     canvas_height: int,
+    playing: bool,
 ) -> dict[str, Any]:
     summary, per_rollout = _rollout_stats(traj, dt)
     map_height, map_width = env.track.occ_map.shape
@@ -221,6 +222,7 @@ def _payload(
         "bounds": _bounds(env, traj),
         "colors": _COLORS,
         "canvas": {"width": int(canvas_width), "height": int(canvas_height)},
+        "playing": bool(playing),
     }
 
 
@@ -293,6 +295,7 @@ class WebRenderer:
             metadata,
             self.window_width,
             self.window_height,
+            self.playing,
         )
         payload_json = json.dumps(page_payload, separators=(",", ":"), allow_nan=False)
         html = _HTML_TEMPLATE.replace("__PAYLOAD__", payload_json)
@@ -452,7 +455,7 @@ if (payload.map.image) {
 let rolloutIndex = 0;
 let stepIndex = 0;
 let speedMultiplier = 1.0;
-let playing = true;
+let playing = Boolean(payload.playing);
 let lastTimestamp = 0;
 let carriedMs = 0;
 
@@ -697,6 +700,7 @@ function syncControls() {
   stepRange.max = String(payload.summary.steps - 1);
   stepRange.value = String(stepIndex);
   document.getElementById("stepLabel").textContent = `step ${stepIndex} / ${payload.summary.steps - 1}`;
+  document.getElementById("playPause").textContent = playing ? "Pause" : "Play";
 }
 
 function drawAll() {

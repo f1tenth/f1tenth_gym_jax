@@ -116,11 +116,20 @@ class TestRenderer(unittest.TestCase):
             WebRenderer(env, render_mode="rgb_array")
 
     def test_play_pause_tracks_default_playback_state(self):
-        env, _ = self._make_renderer_inputs()
+        env, trajectory = self._make_renderer_inputs()
         renderer = WebRenderer(env)
 
         self.assertTrue(renderer.playing)
         renderer.play_pause()
         self.assertFalse(renderer.playing)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = pathlib.Path(tmpdir) / "paused.html"
+            renderer.render(trajectory, output_path=output)
+            payload = _payload_from_dashboard(output)
+
+            self.assertFalse(payload["playing"])
+            self.assertIn("let playing = Boolean(payload.playing);", output.read_text())
+
         renderer.play_pause()
         self.assertTrue(renderer.playing)

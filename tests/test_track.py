@@ -254,8 +254,28 @@ class TestTrack(unittest.TestCase):
         with self.assertRaises(ValueError):
             Track.from_numpy(np.zeros((2, 6)), s_frame_max=1.0)
 
+        waypoints = np.zeros((2, 7))
+        with self.assertRaisesRegex(ValueError, "downsample_step"):
+            Track.from_numpy(waypoints, s_frame_max=1.0, downsample_step=0)
+
         with self.assertRaises(FileNotFoundError):
             Track.from_raceline_file(pathlib.Path("missing_raceline.csv"))
+
+    def test_from_raceline_file_rejects_invalid_downsample_step(self):
+        waypoints = np.array(
+            [
+                [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+                [1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+                [2.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            ]
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filepath = pathlib.Path(tmpdir) / "raceline.csv"
+            np.savetxt(filepath, waypoints, delimiter=";")
+
+            with self.assertRaisesRegex(ValueError, "downsample_step"):
+                Track.from_raceline_file(filepath, downsample_step=-1)
 
     def test_frenet_to_cartesian(self):
         track_name = "Spielberg"

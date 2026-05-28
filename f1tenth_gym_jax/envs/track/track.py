@@ -25,6 +25,12 @@ def _resolve_track_file(track_dir: pathlib.Path, filename: str, description: str
     return resolved_path
 
 
+def _validate_downsample_step(downsample_step: int) -> int:
+    if not isinstance(downsample_step, int) or downsample_step < 1:
+        raise ValueError("downsample_step must be a positive integer.")
+    return downsample_step
+
+
 class Track:
     ss: np.ndarray
     xs: np.ndarray
@@ -208,6 +214,7 @@ class Track:
         """
         if waypoints.shape[1] < 7:
             raise ValueError("expected waypoints as [s, x, y, psi, k, vx, ax]")
+        downsample_step = _validate_downsample_step(downsample_step)
 
         xs = waypoints[::downsample_step, 1]
         ys = waypoints[::downsample_step, 2]
@@ -259,6 +266,7 @@ class Track:
         waypoints = np.loadtxt(filepath, delimiter=delimiter).astype(np.float32)
         if waypoints.shape[1] < 7:
             raise ValueError("expected waypoints as [s, x, y, psi, k, vx, ax]")
+        downsample_step = _validate_downsample_step(downsample_step)
 
         xs = waypoints[::downsample_step, 1]
         ys = waypoints[::downsample_step, 2]

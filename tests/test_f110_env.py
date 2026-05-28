@@ -53,6 +53,24 @@ class TestF110Env(unittest.TestCase):
         )
         self.assertFalse(bool(dones["__all__"]))
 
+    def test_single_agent_collision_mode_steps(self):
+        env = make(
+            "Spielberg_1_noscan_collision_progress_acceleration+steeringvelocity_1_5_v0"
+        )
+        obs, state = env.reset(jax.random.key(0))
+        actions = {"agent_0": jnp.array([0.0, 0.5])}
+
+        obs, next_state, rewards, dones, infos = env.step(
+            jax.random.key(1), state, actions
+        )
+
+        self.assertEqual(set(obs), {"agent_0"})
+        self.assertEqual(set(rewards), {"agent_0"})
+        self.assertEqual(set(dones), {"agent_0", "__all__"})
+        self.assertEqual(infos, {})
+        self.assertEqual(next_state.cartesian_states.shape, (1, env.state_size))
+        self.assertTrue(bool(jnp.isfinite(rewards["agent_0"])))
+
     def test_step_auto_resets_when_all_agents_done(self):
         env = make(BASE_ENV_ID)
         _, state = env.reset(jax.random.key(0))

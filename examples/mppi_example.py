@@ -23,6 +23,11 @@ from f1tenth_gym_jax.envs.track.cubic_spline import nearest_point_on_trajectory_
 from f1tenth_gym_jax.envs.utils import batchify, unbatchify
 
 
+def _validate_positive_int(name: str, value: int) -> None:
+    if not isinstance(value, int) or value < 1:
+        raise ValueError(f"{name} must be a positive integer.")
+
+
 @struct.dataclass
 class MPPIConfig:
     # mppi
@@ -101,6 +106,9 @@ class MPPI:
         env: F110Env,
         rng: chex.PRNGKey,
     ):
+        _validate_positive_int("config.n_steps", config.n_steps)
+        _validate_positive_int("config.n_samples", config.n_samples)
+
         self.config = config
         self.env = env
         self.rng = rng
@@ -219,6 +227,12 @@ def run_mppi(
     plot: bool = True,
     render: bool = True,
 ):
+    _validate_positive_int("num_agents", num_agents)
+    _validate_positive_int("num_envs", num_envs)
+    _validate_positive_int("num_steps", num_steps)
+    _validate_positive_int("config.n_steps", config.n_steps)
+    _validate_positive_int("config.n_samples", config.n_samples)
+
     num_actors = num_agents * num_envs
     num_states = config.state_dim
 

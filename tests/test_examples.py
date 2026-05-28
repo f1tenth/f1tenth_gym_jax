@@ -187,6 +187,27 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(trajectory.shape, (1, 1, 1, 7))
         self.assertTrue(np.isfinite(trajectory).all())
 
+    def test_waypoint_follow_example_rejects_non_positive_counts(self):
+        waypoint_follow = _load_example_module("waypoint_follow")
+
+        invalid_kwargs = [
+            ("num_agents", 0),
+            ("num_envs", 0),
+            ("num_steps", 0),
+        ]
+
+        for field, value in invalid_kwargs:
+            with self.subTest(field=field):
+                kwargs = {
+                    "num_agents": 1,
+                    "num_envs": 1,
+                    "num_steps": 1,
+                    field: value,
+                    "render": False,
+                }
+                with self.assertRaisesRegex(ValueError, field):
+                    waypoint_follow.run_waypoint_follow(**kwargs)
+
     def test_mppi_waypoint_geometry_uses_raceline_arclength_and_xy(self):
         mppi_example = _load_example_module("mppi_example")
         env = make(
@@ -252,6 +273,44 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(np.asarray(all_done).shape, (1, 1, 1))
         self.assertTrue(np.isfinite(trajectory).all())
         self.assertTrue(np.isfinite(np.asarray(all_reward)).all())
+
+    def test_mppi_example_rejects_non_positive_counts(self):
+        mppi_example = _load_example_module("mppi_example")
+
+        invalid_run_kwargs = [
+            ("num_agents", 0),
+            ("num_envs", 0),
+            ("num_steps", 0),
+        ]
+        for field, value in invalid_run_kwargs:
+            with self.subTest(field=field):
+                kwargs = {
+                    "num_agents": 1,
+                    "num_envs": 1,
+                    "num_steps": 1,
+                    field: value,
+                    "config": mppi_example.MPPIConfig(n_samples=2, n_steps=2),
+                    "plot": False,
+                    "render": False,
+                }
+                with self.assertRaisesRegex(ValueError, field):
+                    mppi_example.run_mppi(**kwargs)
+
+        invalid_configs = [
+            ("config.n_samples", mppi_example.MPPIConfig(n_samples=0, n_steps=2)),
+            ("config.n_steps", mppi_example.MPPIConfig(n_samples=2, n_steps=0)),
+        ]
+        for field, config in invalid_configs:
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(ValueError, field):
+                    mppi_example.run_mppi(
+                        num_agents=1,
+                        num_envs=1,
+                        num_steps=1,
+                        config=config,
+                        plot=False,
+                        render=False,
+                    )
 
     def test_video_recording_writes_requested_gif(self):
         video_recording = _load_example_module("video_recording")

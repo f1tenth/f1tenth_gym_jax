@@ -13,6 +13,11 @@ from f1tenth_gym_jax.envs.rendering.renderer import TrajRenderer
 from f1tenth_gym_jax.envs.utils import unbatchify
 
 
+def _validate_positive_int(name: str, value: int) -> None:
+    if not isinstance(value, int) or value < 1:
+        raise ValueError(f"{name} must be a positive integer.")
+
+
 @jax.jit
 def pure_pursuit_2(pose, wpts, Ld=3.0, L=0.33, dt=0.1):
     x, y, theta, current_steer, current_v = pose
@@ -43,6 +48,10 @@ def run_waypoint_follow(
     num_steps: int = 1000,
     render: bool = True,
 ):
+    _validate_positive_int("num_agents", num_agents)
+    _validate_positive_int("num_envs", num_envs)
+    _validate_positive_int("num_steps", num_steps)
+
     num_actors = num_agents * num_envs
 
     env = make(

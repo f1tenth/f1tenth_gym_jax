@@ -64,6 +64,36 @@ class TrainConfig(NamedTuple):
     tags: List[str] = ["ppo", "gaussian actor"]
 
 
+def _validate_positive_int(name: str, value: int) -> None:
+    if not isinstance(value, int) or value < 1:
+        raise ValueError(f"{name} must be a positive integer.")
+
+
+def normalize_train_config(config: TrainConfig) -> TrainConfig:
+    _validate_positive_int("num_agents", config.num_agents)
+    _validate_positive_int("num_envs", config.num_envs)
+    _validate_positive_int("num_steps", config.num_steps)
+    _validate_positive_int("total_timesteps", config.total_timesteps)
+    _validate_positive_int("num_minibatches", config.num_minibatches)
+    _validate_positive_int("update_epochs", config.update_epochs)
+
+    num_actors = config.num_agents * config.num_envs
+    num_updates = config.total_timesteps // config.num_steps // config.num_envs
+    if num_updates < 1:
+        raise ValueError(
+            "total_timesteps must cover at least one full num_steps x num_envs rollout."
+        )
+    if num_actors % config.num_minibatches != 0:
+        raise ValueError("num_minibatches must divide num_agents * num_envs.")
+
+    minibatch_size = num_actors * config.num_steps // config.num_minibatches
+    return config._replace(
+        num_actors=num_actors,
+        num_updates=num_updates,
+        minibatch_size=minibatch_size,
+    )
+
+
 class Transition(NamedTuple):
     global_done: jnp.ndarray
     done: jnp.ndarray
@@ -156,6 +186,8 @@ def load_params(filename: Union[str, os.PathLike]) -> Dict:
 
 
 def make_train(config: TrainConfig) -> Callable:
+    config = normalize_train_config(config)
+
     # make environment
     env = LogWrapper(make(config.env_name))
 
@@ -578,7 +610,7 @@ def make_train(config: TrainConfig) -> Callable:
 
 
 def main():
-    config = TrainConfig()
+    config = normalize_train_config(TrainConfig())
     saved_model_dir = f"./trained_models_ppo/{config.run_name}"
     os.makedirs(saved_model_dir, exist_ok=True)
     wandb.init(

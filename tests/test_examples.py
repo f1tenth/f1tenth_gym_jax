@@ -105,6 +105,50 @@ class TestExamples(unittest.TestCase):
             ).is_file()
         )
 
+    def test_ppo_train_config_derived_fields_are_normalized(self):
+        train_ppo_example = _load_example_module("train_ppo_example")
+
+        config = train_ppo_example.normalize_train_config(
+            train_ppo_example.TrainConfig(
+                num_envs=2,
+                num_steps=4,
+                total_timesteps=32,
+                num_minibatches=1,
+            )
+        )
+
+        self.assertEqual(config.num_actors, config.num_agents * config.num_envs)
+        self.assertEqual(config.num_updates, 4)
+        self.assertEqual(config.minibatch_size, 8)
+
+    def test_ppo_train_config_rejects_invalid_rollout_shape(self):
+        train_ppo_example = _load_example_module("train_ppo_example")
+
+        invalid_configs = [
+            (
+                "total_timesteps",
+                train_ppo_example.TrainConfig(
+                    total_timesteps=1,
+                    num_envs=2,
+                    num_steps=2,
+                    num_minibatches=1,
+                ),
+            ),
+            (
+                "num_minibatches",
+                train_ppo_example.TrainConfig(num_envs=2, num_minibatches=3),
+            ),
+            (
+                "num_envs",
+                train_ppo_example.TrainConfig(num_envs=0),
+            ),
+        ]
+
+        for field, config in invalid_configs:
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(ValueError, field):
+                    train_ppo_example.normalize_train_config(config)
+
     def test_ppo_trained_model_artifacts_are_paired_and_parseable(self):
         artifacts = _ppo_artifact_pairs()
         self.assertGreater(len(artifacts), 0)

@@ -2,8 +2,8 @@ import pathlib
 import tarfile
 import tempfile
 
-import numpy as np
 import requests
+
 
 def find_track_dir(track_name: str) -> pathlib.Path:
     """

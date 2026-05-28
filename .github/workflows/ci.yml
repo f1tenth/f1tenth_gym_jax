@@ -2,45 +2,42 @@ name: CI
 
 on:
   push:
-    branches: [ main , 'v*', 'dev*']
+    branches: [main]
   pull_request:
-    branches: [ main , 'v*' ]
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
-  build:
-
+  tests:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    env:
+      JAX_PLATFORMS: cpu
+      QT_QPA_PLATFORM: offscreen
 
     steps:
-    - name: Install openGL
-      run: sudo apt install freeglut3-dev
+      - uses: actions/checkout@v4
 
-    - uses: actions/checkout@v2
-    
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
-      with:
-        python-version: ${{ matrix.python-version }}
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install flake8 pytest
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    
-    - name: Install
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e .
-    
-    - name: Test with pytest
-      run: |
-        pytest
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0
+
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+
+      - name: Install dependencies
+        run: uv sync --frozen --dev
+
+      - name: Test
+        run: uv run pytest

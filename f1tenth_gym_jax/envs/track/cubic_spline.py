@@ -3,14 +3,14 @@ Cubic Spline interpolation using scipy.interpolate
 Provides utilities for position, curvature, yaw, and arclength calculation
 """
 
+from functools import partial
+from typing import Optional
+
+import jax
+import jax.numpy as jnp
 import numpy as np
 import scipy.optimize as so
 from scipy import interpolate
-from typing import Optional
-from functools import partial
-import jax.numpy as jnp
-import jax
-from jax import lax
 
 
 @jax.jit
@@ -49,12 +49,14 @@ def first_point_on_trajectory(
 
     return idx, closest_point, dist
 
+
 @jax.jit
 def _calc_yaw_from_xy(x, y):
     dx_dt = jnp.gradient(x)
     dy_dt = jnp.gradient(y)
     heading = jnp.arctan2(dy_dt, dx_dt)
     return heading
+
 
 class CubicSplineND:
     """
@@ -407,11 +409,12 @@ class CubicSplineND:
         """
 
         def distance_to_spline(s):
-            x_eval, y_eval = self.spline(s)[0]
+            s_value = float(np.atleast_1d(s)[0])
+            x_eval, y_eval = self.spline(s_value)[:2]
             return np.sqrt((x - x_eval) ** 2 + (y - y_eval) ** 2)
 
         output = so.fmin(distance_to_spline, s_guess, full_output=True, disp=False)
-        closest_s = float(output[0][0])
+        closest_s = float(output[0][0]) % self.s[-1]
         absolute_distance = output[1]
         return closest_s, absolute_distance
 

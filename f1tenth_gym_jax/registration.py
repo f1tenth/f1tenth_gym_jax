@@ -49,7 +49,7 @@ def _parse_scenario(scenario: str):
             raise ValueError(
                 f"Invalid timestep ratio: {timestep_ratio}, must be an integer."
             ) from exc
-        
+
     max_steps = scenario[7 + index_bump]
     if max_steps == "v0":
         max_steps = None

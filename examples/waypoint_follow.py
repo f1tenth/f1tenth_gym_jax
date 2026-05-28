@@ -8,8 +8,9 @@ import jax.numpy as jnp
 import numpy as np
 
 from f1tenth_gym_jax import make
-from f1tenth_gym_jax.envs.utils import batchify, unbatchify
 from f1tenth_gym_jax.envs.rendering.renderer import TrajRenderer
+from f1tenth_gym_jax.envs.utils import unbatchify
+
 
 @jax.jit
 def pure_pursuit_2(pose, wpts, Ld=3.0, L=0.33, dt=0.1):
@@ -20,9 +21,9 @@ def pure_pursuit_2(pose, wpts, Ld=3.0, L=0.33, dt=0.1):
 
     ds = jnp.hypot(xv, yv)
     i = jnp.argmin(jnp.abs(ds - Ld))
-    x_ld, y_ld = xv[i], yv[i]
+    _, y_ld = xv[i], yv[i]
 
-    kappa = 2. * y_ld / (Ld ** 2)
+    kappa = 2.0 * y_ld / (Ld**2)
     desired_steer = jnp.arctan(L * kappa)
 
     sv = (desired_steer - current_steer) / dt
@@ -34,15 +35,17 @@ def pure_pursuit_2(pose, wpts, Ld=3.0, L=0.33, dt=0.1):
 
     return jnp.array([sv, accl])
 
-def main():
 
+def main():
     num_agents = 3
     num_envs = 10
     num_actors = num_agents * num_envs
 
-    env = make(f"Spielberg_{num_agents}_noscan_time_v0")
-    l = env.track.raceline
-    waypoints = jnp.vstack((l.xs, l.ys, l.vxs)).T
+    env = make(
+        f"Spielberg_{num_agents}_noscan_nocollision_progress_acceleration+steeringvelocity_1_v0"
+    )
+    raceline = env.track.raceline
+    waypoints = jnp.vstack((raceline.xs, raceline.ys, raceline.vxs)).T
     rng = jax.random.key(0)
 
     @jax.jit
@@ -58,9 +61,9 @@ def main():
         rng, _rng = jax.random.split(rng)
         step_rngs = jax.random.split(_rng, num_envs)
 
-        batched_obs = batchify(last_obsv, env.agents, num_actors)
+        batched_states = env_state.cartesian_states.reshape((num_actors, -1))
         batched_actions = jax.vmap(pure_pursuit_2, in_axes=(0, None))(
-            batched_obs[:, [0, 1, 4, 2, 3]], waypoints
+            batched_states[:, [0, 1, 4, 2, 3]], waypoints
         )
         env_actions = unbatchify(batched_actions, env.agents, num_envs, num_agents)
 

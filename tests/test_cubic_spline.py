@@ -1,14 +1,22 @@
 import unittest
 
 import numpy as np
+
 from f1tenth_gym_jax.envs.track import cubic_spline
 
 
 class TestCubicSpline(unittest.TestCase):
-    def test_calc_curvature(self):
+    def _circle_track(self):
         circle_x = np.cos(np.linspace(0, 2 * np.pi, 100))[:-1]
         circle_y = np.sin(np.linspace(0, 2 * np.pi, 100))[:-1]
-        track = cubic_spline.CubicSpline2D(circle_x, circle_y)
+        return cubic_spline.CubicSplineND(circle_x, circle_y)
+
+    def _assert_angles_close(self, actual, expected, places=2):
+        diff = np.arctan2(np.sin(actual - expected), np.cos(actual - expected))
+        self.assertAlmostEqual(diff, 0, places=places)
+
+    def test_calc_curvature(self):
+        track = self._circle_track()
         # Test the curvature at the four corners of the circle
         # The curvature of a circle is 1/radius
         self.assertAlmostEqual(track.calc_curvature(0), 1, places=3)
@@ -17,20 +25,16 @@ class TestCubicSpline(unittest.TestCase):
         self.assertAlmostEqual(track.calc_curvature(3 * np.pi / 2), 1, places=3)
 
     def test_calc_yaw(self):
-        circle_x = np.cos(np.linspace(0, 2 * np.pi, 100))[:-1]
-        circle_y = np.sin(np.linspace(0, 2 * np.pi, 100))[:-1]
-        track = cubic_spline.CubicSpline2D(circle_x, circle_y)
+        track = self._circle_track()
         # Test the yaw at the four corners of the circle
         # The yaw of a circle is s + pi/2
-        self.assertAlmostEqual(track.calc_yaw(0), np.pi / 2, places=2)
-        self.assertAlmostEqual(track.calc_yaw(np.pi / 2), np.pi, places=2)
-        self.assertAlmostEqual(track.calc_yaw(np.pi), 3 * np.pi / 2, places=2)
-        self.assertAlmostEqual(track.calc_yaw(3 * np.pi / 2), 0, places=2)
+        self._assert_angles_close(track.calc_yaw(0), np.pi / 2)
+        self._assert_angles_close(track.calc_yaw(np.pi / 2), np.pi)
+        self._assert_angles_close(track.calc_yaw(np.pi), 3 * np.pi / 2)
+        self._assert_angles_close(track.calc_yaw(3 * np.pi / 2), 0)
 
     def test_calc_position(self):
-        circle_x = np.cos(np.linspace(0, 2 * np.pi, 100))[:-1]
-        circle_y = np.sin(np.linspace(0, 2 * np.pi, 100))[:-1]
-        track = cubic_spline.CubicSpline2D(circle_x, circle_y)
+        track = self._circle_track()
         # Test the position at the four corners of the circle
         # The position of a circle is (x, y) = (cos(s), sin(s))
         self.assertTrue(
@@ -49,9 +53,7 @@ class TestCubicSpline(unittest.TestCase):
         )
 
     def test_calc_arclength(self):
-        circle_x = np.cos(np.linspace(0, 2 * np.pi, 100))[:-1]
-        circle_y = np.sin(np.linspace(0, 2 * np.pi, 100))[:-1]
-        track = cubic_spline.CubicSpline2D(circle_x, circle_y)
+        track = self._circle_track()
         # Test the arclength at the four corners of the circle
         self.assertAlmostEqual(track.calc_arclength(1, 0, 0)[0], 0, places=2)
         self.assertAlmostEqual(track.calc_arclength(0, 1, 0)[0], np.pi / 2, places=2)
@@ -62,18 +64,12 @@ class TestCubicSpline(unittest.TestCase):
             track.calc_arclength(0, -1, np.pi)[0], 3 * np.pi / 2, places=2
         )
 
-    def test_calc_arclength_inaccurate(self):
-        circle_x = np.cos(np.linspace(0, 2 * np.pi, 100))[:-1]
-        circle_y = np.sin(np.linspace(0, 2 * np.pi, 100))[:-1]
-        track = cubic_spline.CubicSpline2D(circle_x, circle_y)
+    def test_calc_arclength_slow(self):
+        track = self._circle_track()
         # Test the arclength at the four corners of the circle
-        self.assertAlmostEqual(track.calc_arclength_inaccurate(1, 0)[0], 0, places=2)
+        self.assertAlmostEqual(track.calc_arclength_slow(1, 0)[0], 0, places=2)
+        self.assertAlmostEqual(track.calc_arclength_slow(0, 1)[0], np.pi / 2, places=2)
+        self.assertAlmostEqual(track.calc_arclength_slow(-1, 0)[0], np.pi, places=2)
         self.assertAlmostEqual(
-            track.calc_arclength_inaccurate(0, 1)[0], np.pi / 2, places=2
-        )
-        self.assertAlmostEqual(
-            track.calc_arclength_inaccurate(-1, 0)[0], np.pi, places=2
-        )
-        self.assertAlmostEqual(
-            track.calc_arclength_inaccurate(0, -1)[0], 3 * np.pi / 2, places=2
+            track.calc_arclength_slow(0, -1)[0], 3 * np.pi / 2, places=2
         )

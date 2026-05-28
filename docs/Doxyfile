@@ -1,5 +1,5 @@
-PROJECT_NAME      = "f1tenth_gym"
-INPUT             = ../gym/f110_gym
+PROJECT_NAME      = "f1tenth_gym_jax"
+INPUT             = ../f1tenth_gym_jax
 GENERATE_LATEX    = NO
 GENERATE_MAN      = NO
 GENERATE_RTF      = NO

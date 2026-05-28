@@ -1,9 +1,10 @@
 import pathlib
-from typing import Optional
-import numpy as np
 from functools import partial
-import jax.numpy as jnp
+from typing import Optional
+
 import jax
+import jax.numpy as jnp
+import numpy as np
 import yaml
 from PIL import Image
 from PIL.Image import Transpose
@@ -34,11 +35,11 @@ class Track:
         self,
         xs: np.ndarray,
         ys: np.ndarray,
-        occ_map: np.ndarray,
-        resolution: float,
-        ox: float,
-        oy: float,
-        oyaw: float,
+        occ_map: Optional[np.ndarray] = None,
+        resolution: float = 1.0,
+        ox: float = 0.0,
+        oy: float = 0.0,
+        oyaw: float = 0.0,
         velxs: np.ndarray = None,
         filepath: Optional[str] = None,
         centerline: Optional[CubicSplineND] = None,
@@ -80,7 +81,9 @@ class Track:
         self.ks = kappas
         self.vxs = velxs
         self.axs = accxs
-        self.occ_map = occ_map
+        self.occ_map = (
+            occ_map if occ_map is not None else np.full((1, 1), 255.0, dtype=np.float32)
+        )
         self.resolution = resolution
         self.ox = ox
         self.oy = oy
@@ -193,7 +196,6 @@ class Track:
             waypoints.shape[1] >= 7
         ), "expected waypoints as [s, x, y, psi, k, vx, ax]"
 
-        ss = waypoints[::downsample_step, 0]
         xs = waypoints[::downsample_step, 1]
         ys = waypoints[::downsample_step, 2]
         yaws = waypoints[::downsample_step, 3]
@@ -245,7 +247,6 @@ class Track:
             waypoints.shape[1] >= 7
         ), "expected waypoints as [s, x, y, psi, k, vx, ax]"
 
-        ss = waypoints[::downsample_step, 0]
         xs = waypoints[::downsample_step, 1]
         ys = waypoints[::downsample_step, 2]
         yaws = waypoints[::downsample_step, 3]

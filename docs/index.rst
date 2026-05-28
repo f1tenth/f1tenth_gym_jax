@@ -2,18 +2,18 @@
   :width: 60
   :align: left
 
-F1TENTH Gym Documentation 
+F1TENTH Gym JAX Documentation 
 ================================================
 
 Overview
 ---------
-The F1TENTH Gym environment is created for research that needs a asynchronous, realistic vehicle simulation with multiple vehicle instances in the same environment, with applications in reinforcement learning.
+The F1TENTH Gym JAX environment is created for research that needs a deterministic, vectorizable vehicle simulation with multiple vehicles in the same environment, with applications in reinforcement learning.
 
-The environment is designed with determinism in mind. All agents' physics simulation are stepped simultaneously, and all randomness are seeded and experiments can be reproduced. The explicit stepping also enables the physics engine to take advantage of faster than real-time execution (up to 30x realtime) and enable massively parallel applications.
+The environment is designed with determinism in mind. All agents' physics simulation are stepped simultaneously, and all randomness is controlled by explicit JAX PRNG keys. The explicit stepping API also enables ``jax.jit`` and ``jax.vmap`` workflows.
 
-Github repo: https://github.com/f1tenth/f1tenth_gym
+Github repo: https://github.com/f1tenth/f1tenth_gym_jax
 
-Note that the GitHub will have more up to date documentation than this page. If you see a mistake, please contribute a fix!
+Note that GitHub may have more up to date documentation than this page. If you see a mistake, please contribute a fix.
 
 Example Usecases
 ------------------
@@ -85,10 +85,7 @@ To build a physical 1/10th scale vehicle, following the guide here: https://f1te
   :caption: API REFERENCE
   :maxdepth: 2
 
-  api/base_classes
   api/dynamic_models
-  api/laser_models
   api/collision_models
   api/env
-  api/obv
   api/rendering

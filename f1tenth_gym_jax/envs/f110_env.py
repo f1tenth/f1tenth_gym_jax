@@ -6,45 +6,45 @@ Based on JaxMARL api which follows PettingZoo/Gymnax
 Author: Hongrui Zheng
 """
 
+# other
+from functools import partial
+
 # typing
 from typing import Dict, Tuple
 
-from .multi_agent_env import MultiAgentEnv
-from .spaces import Box
+import chex
 
 # jax
 import jax
 import jax.numpy as jnp
-import chex
 
 # numpy scipy
 import numpy as np
+
+# scanning
+from jax_pf.ray_marching import get_scan
 from scipy.ndimage import distance_transform_edt as edt
 
-# other
-from functools import partial
-
-# dataclasses
-from .utils import State, Param
-
-# track
-from .track import Track
+# collisions
+from .collision_models import collision, collision_map, get_vertices
 
 # dynamics
 from .dynamic_models import (
     vehicle_dynamics_ks,
-    vehicle_dynamics_st_switching,
     vehicle_dynamics_st_smooth,
+    vehicle_dynamics_st_switching,
 )
 
 # integrators
 from .integrator import integrate_euler, integrate_rk4
+from .multi_agent_env import MultiAgentEnv
+from .spaces import Box
 
-# scanning
-from jax_pf.ray_marching import get_scan
+# track
+from .track import Track
 
-# collisions
-from .collision_models import collision, collision_map, get_vertices
+# dataclasses
+from .utils import Param, State
 
 
 class F110Env(MultiAgentEnv):
@@ -335,6 +335,8 @@ class F110Env(MultiAgentEnv):
                     relative_poses[:, 2],
                 )
             ).flatten()
+            if not self.params.observe_others:
+                relative_states = jnp.empty((0,), dtype=agent_state.dtype)
 
             if self.params.produce_scans:
                 all_states = jnp.hstack((agent_state, relative_states, agent_scan))
@@ -346,7 +348,6 @@ class F110Env(MultiAgentEnv):
 
     @partial(jax.jit, static_argnums=[0])
     def check_done(self, state: State) -> Tuple[Dict[str, bool], State]:
-
         winding_vector = state.cartesian_states[:, [0, 1]] - self.winding_point
 
         # angle differentials, from new winding vectors to previous winding vectors
@@ -371,16 +372,13 @@ class F110Env(MultiAgentEnv):
         # num steps done
         steps_done = state.step >= self.params.max_steps
 
-        # collision dones
-        done_dict = {
-            a: jnp.logical_or(
-                jnp.logical_or(state.collisions[i], laps_done[i]), steps_done
-            )
-            for i, a in enumerate(self.agents)
-        }
+        done = jnp.logical_or(jnp.logical_or(state.collisions, laps_done), steps_done)
+
+        # collision, lap, and step-limit dones
+        done_dict = {a: done[i] for i, a in enumerate(self.agents)}
 
         # update state
-        state = state.replace(done=jnp.logical_or(state.collisions, laps_done))
+        state = state.replace(done=done)
         state = state.replace(prev_winding_vector=winding_vector)
 
         return done_dict, state

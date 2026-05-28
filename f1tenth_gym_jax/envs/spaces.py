@@ -6,8 +6,9 @@ From JaxMARL: https://github.com/FLAIROx/JaxMARL/blob/main/jaxmarl/environments/
 Added here since only using space and env abstract classes but not as a full dep
 """
 
-from typing import Tuple, Union, Sequence
 from collections import OrderedDict
+from typing import Sequence, Tuple, Union
+
 import chex
 import jax
 import jax.numpy as jnp

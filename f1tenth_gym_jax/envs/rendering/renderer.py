@@ -1,18 +1,18 @@
 from __future__ import annotations
-import logging
-from typing import Any, Callable, Optional
+
+from typing import Callable, Optional
 
 import numpy as np
-from PyQt6 import QtWidgets, QtCore
-from PyQt6 import QtGui
 import pyqtgraph as pg
+from PIL import ImageColor
+from PyQt6 import QtCore, QtGui, QtWidgets
 from pyqtgraph.examples.utils import FrameCounter
 from pyqtgraph.exporters import ImageExporter
-from PIL import ImageColor
 
-from ..f110_env import F110Env
 from ..collision_models import get_vertices
+from ..f110_env import F110Env
 from .objects import _get_tire_vertices
+
 
 class TrajRenderer:
     """
@@ -217,7 +217,7 @@ class TrajRenderer:
             self.speed = 3
             self.window.show()
         elif self.render_mode == "rgb_array":
-            self.exporter = ImageExporter(self.canvas)
+            self.exporter = ImageExporter(self.canvas.scene())
 
         self.traj_initialized = False
 
@@ -293,7 +293,6 @@ class TrajRenderer:
 
         # update car vertices
         for i in range(self.num_agents):
-            
             vertices = get_vertices(
                 self.traj[self.current_step, self.current_traj, i, [0, 1, 4]],
                 self.env.params.length,
@@ -302,7 +301,7 @@ class TrajRenderer:
             vertices = vertices[[0, 3, 2, 1], :]
             vertices = np.vstack([vertices, vertices[0]])
             self.chassis[i].setData(vertices[:, 0], vertices[:, 1])
-        
+
             fl_vertices = _get_tire_vertices(
                 self.traj[self.current_step, self.current_traj, i, [0, 1, 4]],
                 self.env.params.length,
@@ -334,9 +333,12 @@ class TrajRenderer:
             if render_mode is "rgb_array", returns the rendered frame as an array
         """
         # get sizes
-        self.num_steps, self.num_envs, self.num_agents, self.num_states = (
-            trajectory.shape
-        )
+        (
+            self.num_steps,
+            self.num_envs,
+            self.num_agents,
+            self.num_states,
+        ) = trajectory.shape
         self.traj_initialized = True
         self.traj = trajectory
         self.traj_selector.setMaximum(self.num_envs)
@@ -361,7 +363,7 @@ class TrajRenderer:
                     brush=self.car_colors[i],
                 ),
             )
-            
+
             fl_vertices = _get_tire_vertices(
                 self.traj[self.current_step, self.current_traj, i, [0, 1, 4]],
                 self.env.params.length,
@@ -411,7 +413,7 @@ class TrajRenderer:
 
             ptr = qImage.bits()
             ptr.setsize(height * width * 4)
-            frame = np.array(ptr).reshape(height, width, 4)  #  Copies the data
+            frame = np.array(ptr).reshape(height, width, 4)  # Copies the data
 
             # advance frame counter
             if self.current_step >= self.num_steps:
@@ -469,7 +471,7 @@ class TrajRenderer:
         pen = pg.mkPen(color=pg.mkColor(*color), width=size)
         return self.canvas.plot(
             points[:, 0], points[:, 1], pen=pen, fillLevel=None, antialias=True
-        )  ## setting pen=None disables line drawing
+        )
 
     def render_closed_lines(
         self,
@@ -498,7 +500,7 @@ class TrajRenderer:
 
         return self.canvas.plot(
             points[:, 0], points[:, 1], pen=pen, cosmetic=True, antialias=True
-        )  ## setting pen=None disables line drawing
+        )
 
     def render_vertices(
         self, vertices: np.ndarray, color: Optional[tuple[int, int, int]] = (0, 0, 255)

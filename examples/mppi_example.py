@@ -3,24 +3,23 @@ import os
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".99"
 
+from functools import partial
+from typing import Callable
+
+import chex
 import jax
 import jax.numpy as jnp
-import numpy as np
-from functools import partial
-from flax import struct
-import chex
-
-from typing import Callable
 import matplotlib.pyplot as plt
+import numpy as np
+from flax import struct
 
 from f1tenth_gym_jax import make
 from f1tenth_gym_jax.envs import F110Env
 from f1tenth_gym_jax.envs.dynamic_models import vehicle_dynamics_st_switching
 from f1tenth_gym_jax.envs.integrator import integrate_rk4
-from f1tenth_gym_jax.envs.utils import batchify, unbatchify
-from f1tenth_gym_jax.envs.track.cubic_spline import nearest_point_on_trajectory_jax
-
 from f1tenth_gym_jax.envs.rendering.renderer import TrajRenderer
+from f1tenth_gym_jax.envs.track.cubic_spline import nearest_point_on_trajectory_jax
+from f1tenth_gym_jax.envs.utils import batchify, unbatchify
 
 
 @struct.dataclass
@@ -180,7 +179,6 @@ class MPPI:
 
     @partial(jax.jit, static_argnums=(0))
     def iteration_step(self, rng_da, dyn_state):
-
         # Step 1: sample controls uniformly
         rng_da, rng_da_split1 = jax.random.split(rng_da)
         actions = jax.random.uniform(
@@ -269,9 +267,8 @@ def main():
         rng, _rng = jax.random.split(rng)
         step_rngs = jax.random.split(_rng, num_envs)
 
-        # Get the current state of the vehicle
-        batched_obs = batchify(last_obsv, env.agents, num_actors)
-        dyn_states = batched_obs[..., :7]
+        # Get the current Cartesian dynamics state of each vehicle.
+        dyn_states = env_state.cartesian_states.reshape((num_actors, -1))
 
         # batched_actions [num_actors, num_steps, dim_a]
         # batched_states [num_actors, num_samples, num_steps, dim_s]

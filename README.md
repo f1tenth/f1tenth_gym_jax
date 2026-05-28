@@ -1,62 +1,80 @@
-![Python 3.10 3.11 3.12](https://github.com/f1tenth/f1tenth_gym/actions/workflows/ci.yml/badge.svg)
-![Docker](https://github.com/f1tenth/f1tenth_gym/actions/workflows/docker.yml/badge.svg)
-![Code Style](https://github.com/f1tenth/f1tenth_gym/actions/workflows/lint.yml/badge.svg)
+![CI](https://github.com/f1tenth/f1tenth_gym_jax/actions/workflows/ci.yml/badge.svg)
+![Docker](https://github.com/f1tenth/f1tenth_gym_jax/actions/workflows/docker.yml/badge.svg)
+![Lint](https://github.com/f1tenth/f1tenth_gym_jax/actions/workflows/lint.yml/badge.svg)
 
-# The F1TENTH Gym environment
+# F1TENTH Gym JAX
 
-This is the repository of the F1TENTH Gym environment.
+This repository contains a JAX-compatible multi-agent F1TENTH racing environment.
+The main API is `f1tenth_gym_jax.make(...)`, which returns a jittable environment
+with `reset(key)` and `step(key, state, actions)` methods.
 
-This project is still under heavy developement.
-
-You can find the [documentation](https://f1tenth-gym.readthedocs.io/en/latest/) of the environment here.
+The project is under active development.
 
 ## Quickstart
-We recommend installing the simulation inside a virtualenv. You can install the environment by running:
+
+Install the package in an isolated environment:
 
 ```bash
-virtualenv gym_env
-source gym_env/bin/activate
-git clone https://github.com/f1tenth/f1tenth_gym.git
-cd f1tenth_gym
-pip install -e .
+git clone https://github.com/f1tenth/f1tenth_gym_jax.git
+cd f1tenth_gym_jax
+uv sync
 ```
 
-Then you can run a quick waypoint follow example by:
-```bash
-cd examples
-python3 waypoint_follow.py
+Run a minimal rollout:
+
+```python
+import jax
+import jax.numpy as jnp
+
+from f1tenth_gym_jax import make
+
+env = make("Spielberg_1_noscan_nocollision_progress_acceleration+steeringvelocity_1_100_v0")
+key = jax.random.key(0)
+obs, state = env.reset(key)
+
+actions = {"agent_0": jnp.array([0.0, 1.0])}
+key, step_key = jax.random.split(key)
+obs, state, rewards, dones, infos = env.step(step_key, state, actions)
 ```
 
-A Dockerfile is also provided with support for the GUI with nvidia-docker (nvidia GPU required):
-```bash
-docker build -t f1tenth_gym_container -f Dockerfile .
-docker run --gpus all -it -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix f1tenth_gym_container
-````
-Then the same example can be ran.
+Longer example usage lives in:
 
-## Known issues
-- Library support issues on Windows. You must use Python 3.8 as of 10-2021
-- On MacOS Big Sur and above, when rendering is turned on, you might encounter the error:
+- `examples/train_ppo_example.py`
+- `examples/eval_ppo_example.py`
+- `examples/waypoint_follow.py`
+- `examples/mppi_example.py`
+
+## Environment IDs
+
+Environment IDs use this pattern:
+
+```text
+{map}_{num_agents}_{scan|noscan}_{collision|nocollision}_{rewards}_{longitudinal+steering}_{timestep_ratio}_{max_steps}_v0
 ```
-ImportError: Can't find framework /System/Library/Frameworks/OpenGL.framework.
+
+Example:
+
+```text
+Spielberg_1_scan_collision_progress+alive_velocity+steeringangle_10_v0
 ```
-You can fix the error by installing a newer version of pyglet:
+
+Use `v0` in the `max_steps` slot to request the default episode length.
+
+## Docker
+
 ```bash
-$ pip3 install pyglet==1.5.11
+docker build -t f1tenth_gym_jax -f Dockerfile .
+docker run --gpus all -it -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix f1tenth_gym_jax
 ```
-And you might see an error similar to
-```
-gym 0.17.3 requires pyglet<=1.5.0,>=1.4.0, but you'll have pyglet 1.5.11 which is incompatible.
-```
-which could be ignored. The environment should still work without error.
 
 ## Citing
-If you find this Gym environment useful, please consider citing:
 
-```
+If you find this environment useful, please consider citing:
+
+```text
 @inproceedings{okelly2020f1tenth,
   title={F1TENTH: An Open-source Evaluation Environment for Continuous Control and Reinforcement Learning},
-  author={O’Kelly, Matthew and Zheng, Hongrui and Karthik, Dhruv and Mangharam, Rahul},
+  author={O'Kelly, Matthew and Zheng, Hongrui and Karthik, Dhruv and Mangharam, Rahul},
   booktitle={NeurIPS 2019 Competition and Demonstration Track},
   pages={77--89},
   year={2020},

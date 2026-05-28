@@ -4,7 +4,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".99"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-from typing import Callable, List, NamedTuple, Dict, Union
+from typing import Callable, Dict, List, NamedTuple, Union
 
 import chex
 import distrax
@@ -12,15 +12,15 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import optax
-import wandb
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 from flax.traverse_util import flatten_dict, unflatten_dict
 from safetensors.flax import load_file, save_file
 from tqdm.auto import tqdm
 
+import wandb
 from f1tenth_gym_jax import make
-from f1tenth_gym_jax.envs.utils import batchify, unbatchify, LogWrapper
+from f1tenth_gym_jax.envs.utils import LogWrapper, batchify, unbatchify
 
 
 class TrainConfig(NamedTuple):
@@ -344,9 +344,7 @@ def make_train(config: TrainConfig) -> Callable:
             # update networks
             def _update_epoch(update_state, unused):
                 def _update_minibatch(train_states, batch_info):
-                    (actor_train_state, critic_train_state) = (
-                        train_states
-                    )
+                    (actor_train_state, critic_train_state) = train_states
                     (
                         traj_batch_inside,
                         advantages,
@@ -535,8 +533,12 @@ def make_train(config: TrainConfig) -> Callable:
                 env_step = metric["update_steps"] * config.num_envs * config.num_steps
                 wandb.log(
                     {
-                        "episode_returns": metric["returned_episode_returns"][-1, :].mean(),
-                        "episode_lengths": metric["returned_episode_lengths"][-1, :].mean(),
+                        "episode_returns": metric["returned_episode_returns"][
+                            -1, :
+                        ].mean(),
+                        "episode_lengths": metric["returned_episode_lengths"][
+                            -1, :
+                        ].mean(),
                         "env_step": env_step,
                         **metric["loss"],
                     },

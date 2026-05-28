@@ -6,14 +6,13 @@ Original implementation: https://gitlab.lrz.de/tum-cps/commonroad-vehicle-models
 Author: Hongrui Zheng, Renukanandan Tumu
 """
 
+from functools import partial
+
+import chex
+import jax
+
 # jax
 import jax.numpy as jnp
-import jax
-import chex
-
-# others
-import numpy as np
-from functools import partial
 
 from .utils import Param
 
@@ -164,8 +163,6 @@ def vehicle_dynamics_ks(x_and_u: chex.Array, params: Param) -> chex.Array:
             f (jax.numpy.ndarray (7, )): right hand side of differential equations
     """
     # Controls
-    X = x_and_u[0]
-    Y = x_and_u[1]
     DELTA = x_and_u[2]
     V = x_and_u[3]
     PSI = x_and_u[4]
@@ -243,8 +240,6 @@ def vehicle_dynamics_st_switching(x_and_u: chex.Array, params: Param) -> chex.Ar
             f (jax.numpy.ndarray (7, )): right hand side of differential equations
     """
     # States
-    X = x_and_u[0]
-    Y = x_and_u[1]
     DELTA = x_and_u[2]
     V = jnp.clip(x_and_u[3], min=0.001)
     PSI = x_and_u[4]
@@ -393,8 +388,6 @@ def vehicle_dynamics_st_smooth(x_and_u: chex.Array, params: Param) -> chex.Array
             f (jax.numpy.ndarray (7, )): right hand side of differential equations
     """
     # States
-    X = x_and_u[0]
-    Y = x_and_u[1]
     DELTA = x_and_u[2]
     V = x_and_u[3]
     PSI = x_and_u[4]
@@ -509,7 +502,7 @@ def vehicle_dynamics_st_smooth(x_and_u: chex.Array, params: Param) -> chex.Array
 
 @jax.jit
 def sigmoid_interp(x, shift=0.55, scale=100.0):
-    weight = jnp.exp(scale * (x - shift)) / (1.0 + jnp.exp(scale * (x - shift)))
+    weight = jax.nn.sigmoid(scale * (shift - x))
     return jnp.round(weight, 3)
 
 
@@ -522,7 +515,9 @@ def pid_steer(steer, current_steer, max_sv):
     # else:
     #     sv = 0.0
     sv = jax.lax.select(
-        jnp.fabs(steer_diff) > 1e-4, (steer_diff / np.fabs(steer_diff)) * max_sv, 0.0
+        jnp.fabs(steer_diff) > 1e-4,
+        (steer_diff / jnp.fabs(steer_diff)) * max_sv,
+        0.0,
     )
 
     return sv
@@ -563,10 +558,10 @@ def pid_accl(speed, current_speed, max_a, max_v, min_v):
 
     accl = jnp.select(
         [
-            (current_speed > 0.0 and vel_diff > 0.0),
-            (current_speed > 0.0 and vel_diff <= 0.0),
-            (current_speed <= 0.0 and vel_diff > 0.0),
-            (current_speed <= 0.0 and vel_diff <= 0.0),
+            jnp.logical_and(current_speed > 0.0, vel_diff > 0.0),
+            jnp.logical_and(current_speed > 0.0, vel_diff <= 0.0),
+            jnp.logical_and(current_speed <= 0.0, vel_diff > 0.0),
+            jnp.logical_and(current_speed <= 0.0, vel_diff <= 0.0),
         ],
         [
             (10.0 * max_a / max_v) * vel_diff,

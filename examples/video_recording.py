@@ -1,77 +1,60 @@
+import os
 import time
-import gymnasium as gym
-import gymnasium.wrappers
-import numpy as np
 
-from waypoint_follow import PurePursuitPlanner
+os.environ["QT_QPA_PLATFORM"] = os.environ.get("QT_QPA_PLATFORM", "offscreen")
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+from PIL import Image
+
+from f1tenth_gym_jax import make
+from f1tenth_gym_jax.envs.rendering.renderer import TrajRenderer
 
 
 def main():
-    work = {
-        "mass": 3.463388126201571,
-        "lf": 0.15597534362552312,
-        "tlad": 0.82461887897713965,
-        "vgain": 1,
-    }
-
-    env = gym.make(
-        "f1tenth_gym:f1tenth-v0",
-        config={
-            "map": "Spielberg",
-            "num_agents": 1,
-            "timestep": 0.01,
-            "integrator": "rk4",
-            "control_input": ["speed", "steering_angle"],
-            "model": "st",
-            "observation_config": {"type": "kinematic_state"},
-            "params": {"mu": 1.0},
-        },
-        render_mode="rgb_array",
+    """
+    Roll out the JAX environment and save a short rendered GIF.
+    """
+    env = make(
+        "Spielberg_1_noscan_nocollision_progress_acceleration+steeringvelocity_1_60_v0"
     )
-    env = gymnasium.wrappers.RecordVideo(env, f"video_{time.time()}")
-    track = env.unwrapped.track
+    rng = jax.random.key(0)
+    _, state = env.reset(rng)
 
-    planner = PurePursuitPlanner(track=track, wb=0.17145 + 0.15875)
+    trajectory = []
+    actions = {"agent_0": jnp.array([0.0, 1.0])}
 
-    poses = np.array(
-        [
-            [
-                track.raceline.xs[0],
-                track.raceline.ys[0],
-                track.raceline.yaws[0],
-            ]
-        ]
-    )
-
-    obs, info = env.reset(options={"poses": poses})
-    done = False
-
-    laptime = 0.0
     start = time.time()
+    for _ in range(env.params.max_steps):
+        rng, step_rng = jax.random.split(rng)
+        _, state, _, dones, _ = env.step(step_rng, state, actions)
+        trajectory.append(np.asarray(state.cartesian_states))
+        if bool(dones["__all__"]):
+            break
 
-    frames = [env.render()]
-    while not done and laptime < 15.0:
-        action = env.action_space.sample()
-        for i, agent_id in enumerate(obs.keys()):
-            speed, steer = planner.plan(
-                obs[agent_id]["pose_x"],
-                obs[agent_id]["pose_y"],
-                obs[agent_id]["pose_theta"],
-                work["tlad"],
-                work["vgain"],
-            )
-            action[i] = [steer, speed]
+    trajectory = np.asarray(trajectory)[:, None, :, :]
+    renderer = TrajRenderer(env, render_mode="rgb_array")
+    try:
+        frames = []
+        for _ in range(trajectory.shape[0]):
+            frame = renderer.render(trajectory)
+            if frame is not None:
+                frames.append(Image.fromarray(frame))
+    finally:
+        renderer.close()
 
-        obs, step_reward, done, truncated, info = env.step(action)
-        laptime += step_reward
-
-        frame = env.render()
-        frames.append(frame)
-
-    print("Sim elapsed time:", laptime, "Real elapsed time:", time.time() - start)
-
-    # close env to trigger video saving
-    env.close()
+    output = "f1tenth_gym_jax_rollout.gif"
+    if frames:
+        frames[0].save(
+            output,
+            save_all=True,
+            append_images=frames[1:],
+            duration=int(1000 * env.params.timestep * env.params.timestep_ratio),
+            loop=0,
+        )
+    print(f"Saved {len(frames)} frames to {output} in {time.time() - start:.2f}s")
 
 
 if __name__ == "__main__":

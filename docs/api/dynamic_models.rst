@@ -1,7 +1,7 @@
 Dynamic Models
 ========================================
 
-This file contains all numba just-in-time compiled function for the dynamic models.
+This file contains JAX-compatible dynamic model functions.
 
 .. doxygenfile:: dynamic_models.py
-    :project: f1tenth_gym
+    :project: f1tenth_gym_jax

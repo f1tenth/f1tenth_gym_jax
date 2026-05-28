@@ -1,7 +1,7 @@
 Rendering Engine
 ========================================
 
-This is the rendering engine using pyglet to visualize the running environment.
+This is the PyQtGraph trajectory renderer.
 
-.. doxygenfile:: rendering.py
-    :project: f1tenth_gym
+.. doxygenfile:: rendering/renderer.py
+    :project: f1tenth_gym_jax

@@ -1,50 +1,33 @@
 .. _basic_usage:
 
-Basic Usage Example
-=====================
+Basic Usage
+===========
 
-The environment can work out of the box without too much customization.
-
-A gym env could be instantiated without any extra arguments. By default, it spawns two agents in the Vegas (IROS 2020) map. You can find the image of the map at  ``gym/f110_gym/envs/maps/vegas.png``. At instantiation, the index of the ego agent in the list of agents is 0.
-
-The agents can be reset by calling the ``reset()`` method using a numpy ndarray of size ``(num_agents, 2)``, where each row represents an agent, and the columns are the ``(x, y)`` coordinate of each agent.
-
-The ``reset()`` and ``step()`` method returns:
-    - An *observation* dictionary
-    - A *step reward*, which in the current release is the physics timestep used.
-    - A *done* boolean indicator, flips to true when either a collision happens or the ego agent finishes 2 laps.
-    - An *info* dictionary. Empty in the current release.
-
-The action taken by the ``step()`` function is a numpy ndarray of size ``(num_agents, 2)``, where each row represents an agent's action (indices corresponds to the list of agents), and the columns are control inputs (steering angle, velocity).
-
-A working example can be found in ``examples/waypoint_follow.py``.
-
-The following pseudo code provides a skeleton for creating a simulation loop.
+The current environment API is JAX-native. Create environments with
+``f1tenth_gym_jax.make`` and step them with explicit PRNG keys, immutable state,
+and per-agent action dictionaries.
 
 .. code:: python
 
-    import gym
-    import numpy as np
-    from your_custom_policy import planner # the policy/motion planner that you create
+    import jax
+    import jax.numpy as jnp
 
-    # instantiating the environment
-    racecar_env = gym.make('f110_gym:f110-v0')
-    obs, step_reward, done, info = racecar_env.reset(np.array([[0., 0., 0.], # pose of ego
-                                                               [2., 0., 0.]])) # pose of 2nd agent
-    # instantiating your policy
-    planner = planner()
+    from f1tenth_gym_jax import make
 
-    # simulation loop
-    lap_time = 0.
+    env = make(
+        "Spielberg_1_noscan_nocollision_progress_acceleration+steeringvelocity_1_100_v0"
+    )
 
-    # loops when env not done
-    while not done:
-        # get action based on the observation
-        actions = planner.plan(obs)
+    key = jax.random.key(0)
+    obs, state = env.reset(key)
 
-        # stepping through the environment
-        obs, step_reward, done, info = racecar_env.step(actions)
+    actions = {"agent_0": jnp.array([0.0, 1.0])}
+    key, step_key = jax.random.split(key)
+    obs, state, rewards, dones, infos = env.step(step_key, state, actions)
 
-        lap_time += step_reward
+``reset`` returns an observation dictionary and a JAX state object. ``step``
+returns observations, the next state, per-agent rewards, per-agent done flags
+plus ``"__all__"``, and an info dictionary.
 
-For a more in-depth example that provides more customization to the environment, see :ref:`custom_usage`.
+For full examples, see ``examples/waypoint_follow.py``,
+``examples/train_ppo_example.py``, and ``examples/eval_ppo_example.py``.

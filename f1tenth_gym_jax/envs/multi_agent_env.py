@@ -1,4 +1,4 @@
-""" 
+"""
 Abstract base class for multi agent gym environments with JAX
 Based on the Gymnax and PettingZoo APIs
 
@@ -7,13 +7,12 @@ From JaxMARL: https://github.com/FLAIROx/JaxMARL/blob/main/jaxmarl/environments/
 Added here since only using space and env abstract classes but not as a full dep
 """
 
-import jax
-import jax.numpy as jnp
-from typing import Dict
-import chex
 from functools import partial
+from typing import Dict, Optional, Tuple
+
+import chex
+import jax
 from flax import struct
-from typing import Tuple, Optional
 
 
 @struct.dataclass
@@ -50,7 +49,8 @@ class MultiAgentEnv(object):
         reset_state: Optional[State] = None,
     ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
         """Performs step transitions in the environment. Resets the environment if done.
-        To control the reset state, pass `reset_state`. Otherwise, the environment will reset randomly."""
+        To control the reset state, pass `reset_state`. Otherwise, the environment will reset randomly.
+        """
 
         key, key_reset = jax.random.split(key)
         obs_st, states_st, rewards, dones, infos = self.step_env(key, state, actions)

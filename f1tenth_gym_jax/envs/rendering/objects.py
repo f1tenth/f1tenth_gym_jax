@@ -1,13 +1,9 @@
 from __future__ import annotations
-import numpy as np
-import pyqtgraph as pg
-
-from PyQt6.QtWidgets import QGraphicsRectItem, QGraphicsPolygonItem
-from PyQt6 import QtGui
-
-from ..collision_models import get_vertices, get_trmtx
 
 import jax
+import pyqtgraph as pg
+
+from ..collision_models import get_trmtx
 
 
 class TextObject:
@@ -182,26 +178,47 @@ def _get_tire_vertices(pose_arr, length, width, tire_width, tire_length, fl, ste
 
     H_shift = get_trmtx(
         jax.numpy.array(
-            [-(length / 2 - tire_length / 2), -(working_width / 2 - working_tire_width / 2), 0]
+            [
+                -(length / 2 - tire_length / 2),
+                -(working_width / 2 - working_tire_width / 2),
+                0,
+            ]
         )
     )
     H_steer = get_trmtx(jax.numpy.array([0, 0, steering]))
     H_back = get_trmtx(
-        jax.numpy.array([length / 2 - tire_length / 2, working_width / 2 - working_tire_width / 2, 0])
+        jax.numpy.array(
+            [
+                length / 2 - tire_length / 2,
+                working_width / 2 - working_tire_width / 2,
+                0,
+            ]
+        )
     )
     H = get_trmtx(pose_arr)
     H = H.dot(H_back).dot(H_steer).dot(H_shift)
-    fl = H.dot(jax.numpy.asarray([[length / 2], [working_width / 2], [0.0], [1.0]])).flatten()
+    fl = H.dot(
+        jax.numpy.asarray([[length / 2], [working_width / 2], [0.0], [1.0]])
+    ).flatten()
     fr = H.dot(
-        jax.numpy.asarray([[length / 2], [working_width / 2 - working_tire_width], [0.0], [1.0]])
+        jax.numpy.asarray(
+            [[length / 2], [working_width / 2 - working_tire_width], [0.0], [1.0]]
+        )
     ).flatten()
     rr = H.dot(
         jax.numpy.asarray(
-            [[length / 2 - tire_length], [working_width / 2 - working_tire_width], [0.0], [1.0]]
+            [
+                [length / 2 - tire_length],
+                [working_width / 2 - working_tire_width],
+                [0.0],
+                [1.0],
+            ]
         )
     ).flatten()
     rl = H.dot(
-        jax.numpy.asarray([[length / 2 - tire_length], [working_width / 2], [0.0], [1.0]])
+        jax.numpy.asarray(
+            [[length / 2 - tire_length], [working_width / 2], [0.0], [1.0]]
+        )
     ).flatten()
     rl = rl / rl[3]
     rr = rr / rr[3]
@@ -218,131 +235,3 @@ def _get_tire_vertices(pose_arr, length, width, tire_width, tire_length, fl, ste
     )
 
     return vertices
-
-
-class Car:
-    """
-    Class to display the car.
-    """
-
-    def __init__(
-        self,
-        render_spec: RenderSpec,
-        map_origin: tuple[float, float],
-        resolution: float,
-        car_length: float,
-        car_width: float,
-        color: list[int] | None = None,
-        wheel_size: float = 0.2,
-        parent: pg.PlotWidget = None,
-    ):
-        self.car_length = car_length
-        self.car_width = car_width
-        self.wheel_size = wheel_size
-        self.car_thickness = render_spec.car_tickness
-        self.show_wheels = render_spec.show_wheels
-
-        self.origin = map_origin
-        self.resolution = resolution
-
-        self.color = color or (0, 0, 0)
-        self.pose = (0, 0, 0)
-        self.steering = 0
-        self.chassis = None
-
-        # Tire params need to be updated
-        self.tire_width = 0.1
-        self.tire_length = self.wheel_size
-
-        vertices = get_vertices(self.pose, self.car_length, self.car_width)
-        # vertices are rl, rr, fr, fl => Reorder to be rl, fl, fr, rr
-        vertices = np.array([vertices[0], vertices[3], vertices[2], vertices[1]])
-        # Append the first point to close the polygon
-        vertices = np.vstack([vertices, vertices[0]])
-        self.chassis: pg.PlotDataItem = parent.plot(
-            vertices[:, 0],
-            vertices[:, 1],
-            pen=pg.mkPen(color=(0, 0, 0), width=self.car_thickness),
-            fillLevel=0,
-            brush=self.color,
-        )
-
-        if self.show_wheels:
-            # Top-left wheel center is at fl - (tire_width/2, tire_length/2)
-            fl_vertices = _get_tire_vertices(
-                self.pose,
-                self.car_length,
-                self.car_width,
-                self.tire_width,
-                self.tire_length,
-                "fl",
-                self.steering,
-            )
-            self.fl_wheel = parent.plot(
-                fl_vertices[:, 0],
-                fl_vertices[:, 1],
-                pen=pg.mkPen(color=(0, 0, 0), width=self.car_thickness),
-                fillLevel=0,
-                brush=(0, 0, 0),  # Rubber tire => Black
-            )
-
-            # Top-right wheel center is at fr - (tire_width/2, tire_length/2)
-            fr_vertices = _get_tire_vertices(
-                self.pose,
-                self.car_length,
-                self.car_width,
-                self.tire_width,
-                self.tire_length,
-                "fr",
-                self.steering,
-            )
-            self.fr_wheel = parent.plot(
-                fr_vertices[:, 0],
-                fr_vertices[:, 1],
-                pen=pg.mkPen(color=(0, 0, 0), width=self.car_thickness),
-                fillLevel=0,
-                brush=(0, 0, 0),  # Rubber tire => Black
-            )
-
-    def update(self, state: dict[str, np.ndarray], idx: int):
-        self.pose = (
-            state["poses_x"][idx],
-            state["poses_y"][idx],
-            state["poses_theta"][idx],
-        )
-        self.color = (255, 0, 0) if state["collisions"][idx] > 0 else self.color
-        self.steering = state["steering_angles"][idx]
-
-    def render(self):
-        vertices = get_vertices(self.pose, self.car_length, self.car_width)
-        # vertices are rl, rr, fr, fl => Reorder to be rl, fl, fr, rr
-        vertices = np.array([vertices[0], vertices[3], vertices[2], vertices[1]])
-        # Append the first point to close the polygon
-        vertices = np.vstack([vertices, vertices[0]])
-
-        self.chassis.setData(vertices[:, 0], vertices[:, 1])
-
-        if self.show_wheels:
-            # Top-left wheel center is at fl - (tire_width/2, tire_length/2)
-            fl_vertices = _get_tire_vertices(
-                self.pose,
-                self.car_length,
-                self.car_width,
-                self.tire_width,
-                self.tire_length,
-                "fl",
-                self.steering,
-            )
-            self.fl_wheel.setData(fl_vertices[:, 0], fl_vertices[:, 1])
-
-            # Top-right wheel center is at fr - (tire_width/2, tire_length/2)
-            fr_vertices = _get_tire_vertices(
-                self.pose,
-                self.car_length,
-                self.car_width,
-                self.tire_width,
-                self.tire_length,
-                "fr",
-                self.steering,
-            )
-            self.fr_wheel.setData(fr_vertices[:, 0], fr_vertices[:, 1])

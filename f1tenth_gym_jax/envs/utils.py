@@ -1,10 +1,11 @@
 from functools import partial
-from typing import Dict, List, Tuple, Union
+from typing import Dict, Tuple, Union
 
 import chex
 import jax
 import jax.numpy as jnp
 from flax import struct
+
 from .multi_agent_env import MultiAgentEnv
 
 
@@ -67,9 +68,7 @@ class Param:
     s_max: float = 0.4189  # Maximum steering angle constraint
     sv_min: float = -3.2  # Minimum steering velocity constraint
     sv_max: float = 3.2  # Maximum steering velocity constraint
-    v_switch: float = (
-        7.319  # Switching velocity (velocity at which the acceleration is no longer able to #spin)
-    )
+    v_switch: float = 7.319  # Switching velocity (velocity at which the acceleration is no longer able to #spin)
     a_max: float = 9.51  # Maximum longitudinal acceleration
     v_min: float = -5.0  # Minimum longitudinal velocity
     v_max: float = 20.0  # Maximum longitudinal velocity
@@ -93,8 +92,10 @@ class Param:
     observe_others: bool = True  # whether can observe other agents
     map_name: str = "Spielberg"  # map for environment
     max_num_laps: int = 1  # maximum number of laps to run before done
-    max_steps: int = int(90 / (timestep * timestep_ratio))  # maximum number of steps to run before done
-    reward_type: str = "progress" # reward types
+    max_steps: int = int(
+        90 / (timestep * timestep_ratio)
+    )  # maximum number of steps to run before done
+    reward_type: str = "progress"  # reward types
 
 
 def batchify(x: dict, agent_list, num_actors):

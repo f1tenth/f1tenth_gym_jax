@@ -1,7 +1,7 @@
-Gym Environment
-========================================
+JAX Environment
+===============
 
-This is the top level file that conforms to the OpenAI gym convention.
+This is the top-level JAX environment.
 
 .. doxygenfile:: f110_env.py
-    :project: f1tenth_gym
+    :project: f1tenth_gym_jax

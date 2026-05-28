@@ -35,8 +35,8 @@ html_theme_options = {
 html_context = {
     "display_github": not is_i18n,  # Integrate GitHub
     "github_user": "f1tenth",  # Username
-    "github_repo": "f1tenth_gym",  # Repo name
-    "github_version": "exp_py",  # Version
+    "github_repo": "f1tenth_gym_jax",  # Repo name
+    "github_version": "main",  # Version
     "conf_py_path": "/docs/",  # Path in the checkout to the docs root
 }
 
@@ -49,7 +49,7 @@ html_logo = "assets/f1tenth_gym.svg"
 
 # -- Project information -----------------------------------------------------
 
-project = "f1tenth_gym"
+project = "f1tenth_gym_jax"
 copyright = "2021, Hongrui Zheng, Matthew O'Kelly, Aman Sinha"
 author = "Hongrui Zheng"
 
@@ -66,7 +66,7 @@ version = "latest"
 extensions = ["breathe", "sphinx_rtd_theme", "sphinx.ext.autosectionlabel"]
 
 # Breathe configuration
-breathe_projects = {"f1tenth_gym": "./xml"}
+breathe_projects = {"f1tenth_gym_jax": "./xml"}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]

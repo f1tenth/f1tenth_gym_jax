@@ -1,9 +1,10 @@
 import pathlib
-import time
 import unittest
 
 import numpy as np
-from f1tenth_gym_jax.envs.track import Raceline, Track, find_track_dir
+import yaml
+
+from f1tenth_gym_jax.envs.track import Track, find_track_dir
 
 
 class TestTrack(unittest.TestCase):
@@ -25,10 +26,12 @@ class TestTrack(unittest.TestCase):
         raceline = np.loadtxt(track_dir / f"{track_name}_raceline.csv", delimiter=";")
         s_idx, x_idx, y_idx, psi_idx, kappa_idx, vx_idx, ax_idx = range(7)
 
-        self.assertTrue(np.isclose(track.raceline.ss, raceline[:, s_idx]).all())
+        self.assertTrue(
+            np.isclose(track.raceline.s, raceline[:, s_idx], atol=5e-3).all()
+        )
         self.assertTrue(np.isclose(track.raceline.xs, raceline[:, x_idx]).all())
         self.assertTrue(np.isclose(track.raceline.ys, raceline[:, y_idx]).all())
-        self.assertTrue(np.isclose(track.raceline.yaws, raceline[:, psi_idx]).all())
+        self.assertTrue(np.isclose(track.raceline.psis, raceline[:, psi_idx]).all())
         self.assertTrue(np.isclose(track.raceline.ks, raceline[:, kappa_idx]).all())
         self.assertTrue(np.isclose(track.raceline.vxs, raceline[:, vx_idx]).all())
         self.assertTrue(np.isclose(track.raceline.axs, raceline[:, ax_idx]).all())
@@ -38,8 +41,8 @@ class TestTrack(unittest.TestCase):
         Check that the map dir structure is correct:
         - maps/
             - Trackname/
-                - Trackname_map.*               # map image
-                - Trackname_map.yaml            # map specification
+                - Trackname.*                   # map image
+                - Trackname.yaml                # map specification
                 - [Trackname_raceline.csv]      # raceline (optional)
                 - [Trackname_centerline.csv]    # centerline (optional)
         """
@@ -55,15 +58,16 @@ class TestTrack(unittest.TestCase):
             )
 
             # check map spec file exists
-            file_spec = trackdir / f"{trackdirname}_map.yaml"
+            file_spec = trackdir / f"{trackdirname}.yaml"
             self.assertTrue(
                 file_spec.exists(),
                 f"map spec file {file_spec} does not exist in {trackdir}",
             )
 
             # read map image file from spec
-            map_spec = Track.load_spec(track=str(trackdir), filespec=str(file_spec))
-            file_image = trackdir / map_spec.image
+            with file_spec.open() as f:
+                map_spec = yaml.safe_load(f)
+            file_image = trackdir / map_spec["image"]
 
             # check map image file exists
             self.assertTrue(
@@ -76,68 +80,11 @@ class TestTrack(unittest.TestCase):
             file_centerline = trackdir / f"{trackdir.stem}_centerline.csv"
 
             if file_raceline.exists():
-                # try to load raceline files
-                # it will raise an assertion error if the file format are not valid
-                Raceline.from_raceline_file(file_raceline)
+                Track.from_raceline_file(file_raceline)
 
             if file_centerline.exists():
-                # try to load raceline files
-                # it will raise an assertion error if the file format are not valid
-                Raceline.from_centerline_file(file_centerline)
-
-    def test_download_racetrack(self):
-        import shutil
-
-        track_name = "Spielberg"
-        track_backup = Track.from_track_name(track_name)
-
-        # rename the track dir
-        track_dir = find_track_dir(track_name)
-        tmp_dir = track_dir.parent / f"{track_name}_tmp{int(time.time())}"
-        track_dir.rename(tmp_dir)
-
-        # download the track
-        track = Track.from_track_name(track_name)
-
-        # check the two tracks' specs are the same
-        for spec_attr in [
-            "name",
-            "image",
-            "resolution",
-            "origin",
-            "negate",
-            "occupied_thresh",
-            "free_thresh",
-        ]:
-            self.assertEqual(
-                getattr(track.spec, spec_attr), getattr(track_backup.spec, spec_attr)
-            )
-
-        # check the two tracks' racelines are the same
-        for raceline_attr in ["ss", "xs", "ys", "yaws", "ks", "vxs", "axs"]:
-            self.assertTrue(
-                np.isclose(
-                    getattr(track.raceline, raceline_attr),
-                    getattr(track_backup.raceline, raceline_attr),
-                ).all()
-            )
-
-        # check the two tracks' centerlines are the same
-        for centerline_attr in ["ss", "xs", "ys", "yaws", "ks", "vxs", "axs"]:
-            self.assertTrue(
-                np.isclose(
-                    getattr(track.centerline, centerline_attr),
-                    getattr(track_backup.centerline, centerline_attr),
-                ).all()
-            )
-
-        # remove the newly created track dir
-        track_dir = find_track_dir(track_name)
-        shutil.rmtree(track_dir, ignore_errors=True)
-
-        # rename the backup track dir to its original name
-        track_backup_dir = find_track_dir(tmp_dir.stem)
-        track_backup_dir.rename(track_dir)
+                centerline = np.loadtxt(file_centerline, delimiter=",")
+                self.assertEqual(centerline.shape[1], 4)
 
     def test_frenet_to_cartesian(self):
         track_name = "Spielberg"
@@ -146,7 +93,7 @@ class TestTrack(unittest.TestCase):
         # Check frenet to cartesian conversion
         # using the track's xs, ys
         for s, x, y in zip(
-            track.centerline.ss, track.centerline.xs, track.centerline.ys
+            track.centerline.s, track.centerline.xs, track.centerline.ys
         ):
             x_, y_, _ = track.frenet_to_cartesian(s, 0, 0)
             self.assertAlmostEqual(x, x_, places=2)

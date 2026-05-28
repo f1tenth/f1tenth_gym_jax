@@ -1,269 +1,67 @@
 import unittest
 
-import gymnasium as gym
-import numpy as np
-from f1tenth_gym_jax.envs.utils import deep_update
+import jax
+import jax.numpy as jnp
+
+from f1tenth_gym_jax import make
+from f1tenth_gym_jax.envs.f110_env import F110Env
+
+BASE_ENV_ID = (
+    "Spielberg_2_noscan_nocollision_progress_acceleration+steeringvelocity_1_5_v0"
+)
 
 
-class TestEnvInterface(unittest.TestCase):
-    def _make_env(self, config={}):
-        conf = {
-            "map": "Spielberg",
-            "num_agents": 1,
-            "timestep": 0.01,
-            "integrator": "rk4",
-            "control_input": ["speed", "steering_angle"],
-            "params": {"mu": 1.0},
-        }
-        conf = deep_update(conf, config)
+class TestF110Env(unittest.TestCase):
+    def test_make_returns_jax_environment(self):
+        env = make(BASE_ENV_ID)
 
-        env = gym.make(
-            "f1tenth_gym:f1tenth-v0",
-            config=conf,
-        )
-        return env
+        self.assertIsInstance(env, F110Env)
+        self.assertEqual(env.num_agents, 2)
+        self.assertEqual(env.agents, ["agent_0", "agent_1"])
+        self.assertFalse(env.params.produce_scans)
+        self.assertFalse(env.params.collision_on)
+        self.assertEqual(env.params.reward_type, "progress")
+        self.assertEqual(env.params.max_steps, 5)
 
-    def test_gymnasium_api(self):
-        from gymnasium.utils.env_checker import check_env
+    def test_reset_observation_and_state_shapes(self):
+        env = make(BASE_ENV_ID)
+        obs, state = env.reset(jax.random.key(0))
 
-        env = self._make_env()
-        check_env(env.unwrapped, skip_render_check=True)
+        self.assertEqual(set(obs), set(env.agents))
+        self.assertEqual(state.cartesian_states.shape, (2, 7))
+        self.assertEqual(state.frenet_states.shape, (2, 3))
+        self.assertEqual(state.collisions.shape, (2,))
+        self.assertEqual(obs["agent_0"].shape, env.observation_space("agent_0").shape)
+        self.assertEqual(obs["agent_0"].shape, (11,))
+        self.assertTrue(bool(jnp.all(jnp.isfinite(obs["agent_0"]))))
 
-    def test_configure_method(self):
-        """
-        Test that the configure method works as expected, and that the parameters are
-        correctly updated in the simulator and agents.
-        """
+    def test_step_uses_agent_action_dict(self):
+        env = make(BASE_ENV_ID)
+        obs, state = env.reset(jax.random.key(0))
+        actions = {agent: jnp.array([0.0, 0.5]) for agent in env.agents}
 
-        # create a base environment and use configure() to change the width
-        config_ext = {"params": {"width": 15.0}}
-        base_env = self._make_env()
-        base_env.configure(config=config_ext)
-
-        # create an extended environment, with the width set on initialization
-        extended_env = self._make_env(config=config_ext)
-
-        # check consistency parameters in config
-        for par in base_env.config["params"]:
-            base_val = base_env.config["params"][par]
-            extended_val = extended_env.config["params"][par]
-
-            self.assertEqual(base_val, extended_val, f"{par} should be the same")
-
-        # check consistency in simulator parameters
-        for par in base_env.sim.params:
-            base_val = base_env.sim.params[par]
-            extended_val = extended_env.sim.params[par]
-
-            self.assertEqual(base_val, extended_val, f"{par} should be the same")
-
-        # check consistency in agent parameters
-        for agent, ext_agent in zip(base_env.sim.agents, extended_env.sim.agents):
-            for par in agent.params:
-                base_val = agent.params[par]
-                extended_val = ext_agent.params[par]
-
-                self.assertEqual(base_val, extended_val, f"{par} should be the same")
-
-        # finally, run a simulation and check that the results are the same
-        obs0, _ = base_env.reset(options={"poses": np.array([[0.0, 0.0, np.pi / 2]])})
-        obs1, _ = extended_env.reset(
-            options={"poses": np.array([[0.0, 0.0, np.pi / 2]])}
-        )
-        done0 = done1 = False
-        t = 0
-
-        while not done0 and not done1:
-            action = base_env.action_space.sample()
-            obs0, _, done0, _, _ = base_env.step(action)
-            obs1, _, done1, _, _ = extended_env.step(action)
-            base_env.render()
-            for k in obs0:
-                self.assertTrue(
-                    np.allclose(obs0[k], obs1[k]),
-                    f"Observations {k} should be the same",
-                )
-            self.assertTrue(done0 == done1, "Done should be the same")
-            t += 1
-
-        print(f"Done after {t} steps")
-
-        base_env.close()
-        extended_env.close()
-
-    def test_configure_action_space(self):
-        """
-        Try to change the upper bound of the action space, and check that the
-        action space is correctly updated.
-        """
-        base_env = self._make_env()
-        action_space_low = base_env.action_space.low
-        action_space_high = base_env.action_space.high
-
-        params = base_env.sim.params.copy()
-        new_v_max = 5.0
-        params["v_max"] = new_v_max
-
-        base_env.configure(config={"params": params})
-        new_action_space_low = base_env.action_space.low
-        new_action_space_high = base_env.action_space.high
-
-        self.assertTrue(
-            (action_space_low == new_action_space_low).all(),
-            "Steering action space should be the same",
-        )
-        self.assertTrue(
-            action_space_high[0][0] == new_action_space_high[0][0],
-            "Steering action space should be the same",
-        )
-        self.assertTrue(
-            new_action_space_high[0][1] == new_v_max,
-            f"Speed action high should be {new_v_max}",
+        obs, next_state, rewards, dones, infos = env.step(
+            jax.random.key(1), state, actions
         )
 
-    def test_acceleration_action_space(self):
-        """
-        Test that the acceleration action space is correctly configured.
-        """
-        base_env = self._make_env(config={"control_input": ["accl", "steering_speed"]})
-        params = base_env.sim.params
-        action_space_low = base_env.action_space.low
-        action_space_high = base_env.action_space.high
-
-        self.assertTrue(
-            (action_space_low[0][0] - params["sv_min"]) < 1e-6,
-            "lower sv does not match min steering velocity",
+        self.assertEqual(set(obs), set(env.agents))
+        self.assertEqual(set(rewards), set(env.agents))
+        self.assertEqual(set(dones), set(env.agents + ["__all__"]))
+        self.assertEqual(infos, {})
+        self.assertEqual(
+            next_state.cartesian_states.shape, state.cartesian_states.shape
         )
-        self.assertTrue(
-            (action_space_high[0][0] - params["sv_max"]) < 1e-6,
-            "upper sv does not match max steering velocity",
-        )
-        self.assertTrue(
-            (action_space_low[0][1] + params["a_max"]) < 1e-6,
-            "lower acceleration bound does not match a_min",
-        )
-        self.assertTrue(
-            (action_space_high[0][1] - params["a_max"]) < 1e-6,
-            "upper acceleration bound does not match a_max",
-        )
+        self.assertFalse(bool(dones["__all__"]))
 
-    def test_manual_reset_options_in_synch_vec_env(self):
-        """
-        Test that the environment can be used in a vectorized environment.
-        """
-        num_envs, num_agents = 3, 2
-        config = {
-            "num_agents": num_agents,
-            "observation_config": {"type": "kinematic_state"},
-        }
-        vec_env = gym.vector.make(
-            "f1tenth_gym:f1tenth-v0", asynchronous=False, config=config, num_envs=num_envs
-        )
+    def test_step_auto_resets_when_all_agents_done(self):
+        env = make(BASE_ENV_ID)
+        _, state = env.reset(jax.random.key(0))
+        actions = {agent: jnp.zeros((2,)) for agent in env.agents}
+        done = False
 
-        rnd_poses = np.random.random((2, 3))
-        obss, infos = vec_env.reset(options={"poses": rnd_poses})
+        for step in range(env.params.max_steps):
+            _, state, _, dones, _ = env.step(jax.random.key(step + 1), state, actions)
+            done = bool(dones["__all__"])
 
-        for i, agent_id in enumerate(obss):
-            for ie in range(num_envs):
-                agent_obs = obss[agent_id]
-                agent_pose = np.array(
-                    [
-                        agent_obs["pose_x"][ie],
-                        agent_obs["pose_y"][ie],
-                        agent_obs["pose_theta"][ie],
-                    ]
-                )
-                self.assertTrue(
-                    np.allclose(agent_pose, rnd_poses[i]),
-                    f"pose of agent {agent_id} in env {ie} should be {rnd_poses[i]}, got {agent_pose}",
-                )
-
-    def test_manual_reset_options_in_asynch_vec_env(self):
-        """
-        Test that the environment can be used in a vectorized environment.
-        """
-        num_envs, num_agents = 3, 2
-        config = {
-            "num_agents": num_agents,
-            "observation_config": {"type": "kinematic_state"},
-        }
-        vec_env = gym.make_vec(
-            "f1tenth_gym:f1tenth-v0", vectorization_mode="async", config=config, num_envs=num_envs
-        )
-
-        rnd_poses = np.random.random((2, 3))
-        obss, infos = vec_env.reset(options={"poses": rnd_poses})
-
-        for i, agent_id in enumerate(obss):
-            for ie in range(num_envs):
-                agent_obs = obss[agent_id]
-                agent_pose = np.array(
-                    [
-                        agent_obs["pose_x"][ie],
-                        agent_obs["pose_y"][ie],
-                        agent_obs["pose_theta"][ie],
-                    ]
-                )
-                self.assertTrue(
-                    np.allclose(agent_pose, rnd_poses[i]),
-                    f"pose of agent {agent_id} in env {ie} should be {rnd_poses[i]}, got {agent_pose}",
-                )
-
-    def test_auto_reset_options_in_synch_vec_env(self):
-        """
-        Test that the environment can be used in a vectorized environment without explicit poses.
-        """
-        num_envs, num_agents = 3, 2
-        config = {
-            "num_agents": num_agents,
-            "observation_config": {"type": "kinematic_state"},
-            "reset_config": {"type": "rl_random_random"},
-        }
-        vec_env = gym.make_vec(
-            "f1tenth_gym:f1tenth-v0", vectorization_mode="sync", config=config, num_envs=num_envs,
-        )
-
-        obss, infos = vec_env.reset()
-
-        for i, agent_id in enumerate(obss):
-            agent_pose0 = np.array(
-                [
-                    obss[agent_id]["pose_x"][0],
-                    obss[agent_id]["pose_y"][0],
-                    obss[agent_id]["pose_theta"][0],
-                ]
-            )
-            for ie in range(1, num_envs):
-                agent_obs = obss[agent_id]
-                agent_pose = np.array(
-                    [
-                        agent_obs["pose_x"][ie],
-                        agent_obs["pose_y"][ie],
-                        agent_obs["pose_theta"][ie],
-                    ]
-                )
-                self.assertFalse(
-                    np.allclose(agent_pose, agent_pose0),
-                    f"pose of agent {agent_id} in env {ie} should be random, got same {agent_pose} == {agent_pose0}",
-                )
-
-        # test auto reset
-        all_dones_once = [False] * num_envs
-        all_dones_twice = [False] * num_envs
-
-        max_steps = 1000
-        while not all(all_dones_twice) and max_steps > 0:
-            actions = vec_env.action_space.sample()
-            obss, rewards, dones, truncations, infos = vec_env.step(actions)
-
-            all_dones_once = [all_dones_once[i] or dones[i] for i in range(num_envs)]
-            all_dones_twice = [
-                all_dones_twice[i] or all_dones_once[i] for i in range(num_envs)
-            ]
-            max_steps -= 1
-
-        vec_env.close()
-        self.assertTrue(
-            all(all_dones_twice),
-            f"All envs should be done twice, got {all_dones_twice}",
-        )
+        self.assertTrue(done)
+        self.assertEqual(int(state.step), 0)

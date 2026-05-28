@@ -20,8 +20,8 @@ if errorlevel 9009 (
 	echo.to the full path of the 'sphinx-build' executable. Alternatively you
 	echo.may add the Sphinx directory to PATH.
 	echo.
-	echo.If you don't have Sphinx installed, grab it from
-	echo.http://sphinx-doc.org/
+	echo.Install the docs dependencies with "uv sync --extra docs"
+	echo.or see https://www.sphinx-doc.org/
 	exit /b 1
 )
 

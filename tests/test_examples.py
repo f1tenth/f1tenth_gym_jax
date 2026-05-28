@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import pathlib
 import tempfile
 import unittest
@@ -19,6 +20,35 @@ def _load_example_module(name: str):
 
 
 class TestExamples(unittest.TestCase):
+    def test_notebook_examples_use_current_jax_environment_api(self):
+        examples_dir = pathlib.Path(__file__).parent.parent / "examples"
+        banned_fragments = (
+            "f110_gym",
+            "gym.make",
+            "gymnasium",
+            "jax.random.PRNGKey",
+        )
+
+        for notebook_name in ("benchmark_example.ipynb", "rendering_example.ipynb"):
+            with self.subTest(notebook=notebook_name):
+                notebook = json.loads((examples_dir / notebook_name).read_text())
+                source = "".join(
+                    line
+                    for cell in notebook["cells"]
+                    if cell["cell_type"] == "code"
+                    for line in cell["source"]
+                )
+
+                self.assertIn("from f1tenth_gym_jax import make", source)
+                self.assertIn("jax.random.key", source)
+                for fragment in banned_fragments:
+                    self.assertNotIn(fragment, source)
+
+                for cell in notebook["cells"]:
+                    if cell["cell_type"] == "code":
+                        self.assertIsNone(cell["execution_count"])
+                        self.assertEqual(cell["outputs"], [])
+
     def test_mppi_waypoint_geometry_uses_raceline_arclength_and_xy(self):
         mppi_example = _load_example_module("mppi_example")
         env = make(

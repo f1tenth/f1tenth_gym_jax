@@ -20,8 +20,10 @@ class TestSpaces(unittest.TestCase):
 
     def test_multi_discrete_space(self):
         space = MultiDiscrete([2, 3])
+        sample = space.sample(jax.random.key(0))
 
         self.assertEqual(space.shape, (2,))
+        self.assertEqual(sample.dtype, jnp.int32)
         self.assertTrue(bool(space.contains(jnp.array([1, 2]))))
         self.assertFalse(bool(space.contains(jnp.array([2, 2]))))
         self.assertFalse(bool(space.contains(jnp.array([1]))))

@@ -60,13 +60,13 @@ class MultiDiscrete(Space):
     Minimal jittable class for multi-discrete gymnax spaces.
     """
 
-    def __init__(self, num_categories: Sequence[int]):
+    def __init__(self, num_categories: Sequence[int], dtype=jnp.int32):
         """Num categories is the number of cat actions for each dim, [2,2,2]=2 actions x 3 dim"""
         if any(n < 1 for n in num_categories):
             raise ValueError("MultiDiscrete categories must all be positive.")
-        self.num_categories = jnp.array(num_categories)
+        self.num_categories = jnp.asarray(num_categories, dtype=dtype)
         self.shape = (len(num_categories),)
-        self.dtype = jnp.int_
+        self.dtype = dtype
 
     def sample(self, rng: chex.PRNGKey) -> chex.Array:
         """Sample random action uniformly from set of categorical choices."""

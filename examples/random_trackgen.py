@@ -23,7 +23,7 @@
 
 """
 Generates random tracks.
-Adapted from https://gym.openai.com/envs/CarRacing-v0
+Adapted from the OpenAI Gym CarRacing track generator.
 Author: Hongrui Zheng
 
 Note: additional requirements

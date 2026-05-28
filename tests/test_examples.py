@@ -404,3 +404,10 @@ class TestExamples(unittest.TestCase):
                 centerline[:, 2:],
                 random_trackgen.TRACK_WIDTH * random_trackgen.MAP_RESOLUTION,
             )
+
+    def test_random_trackgen_does_not_reference_stale_gym_url(self):
+        source = (
+            pathlib.Path(__file__).parent.parent / "examples" / "random_trackgen.py"
+        ).read_text()
+
+        self.assertNotIn("https://gym.openai.com", source)

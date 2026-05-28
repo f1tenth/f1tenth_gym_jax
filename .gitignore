@@ -2,13 +2,8 @@
 f1tenth_gym_jax_rollout.html
 blah/
 maps/RandomTrack*/
-build/
-__pycache__
-*.pyc
 .DS_Store
 .vscode/
-docs/_build/
-*.mypy_cache/
 flycheck_*
 # Byte-compiled / optimized / DLL files
 __pycache__/

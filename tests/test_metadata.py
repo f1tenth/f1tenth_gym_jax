@@ -120,3 +120,17 @@ class TestMetadata(unittest.TestCase):
 
         self.assertIn("f1tenth_gym_jax_rollout.html", patterns)
         self.assertNotIn("f1tenth_gym_jax_rollout.gif", patterns)
+
+    def test_gitignore_has_no_duplicate_patterns(self):
+        repo_root = pathlib.Path(__file__).parent.parent
+        gitignore = repo_root / ".gitignore"
+        patterns = [
+            line.strip()
+            for line in gitignore.read_text().splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+
+        duplicates = sorted(
+            pattern for pattern in set(patterns) if patterns.count(pattern) > 1
+        )
+        self.assertEqual(duplicates, [])

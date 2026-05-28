@@ -57,6 +57,7 @@ class TestRenderer(unittest.TestCase):
             self.assertIn("bindCanvasPanZoom", html)
             self.assertIn("overviewOtherRollouts", html)
             self.assertIn("playbackFullTrace", html)
+            self.assertIn("Artifact overlays", html)
             self.assertNotIn(' + "<span><i class="swatch"', html)
 
             payload = _payload_from_dashboard(output)
@@ -70,6 +71,55 @@ class TestRenderer(unittest.TestCase):
             self.assertTrue(
                 payload["map"]["image"].startswith("data:image/png;base64,")
             )
+            self.assertEqual(payload["artifacts"]["overlays"], [])
+
+    def test_web_dashboard_accepts_artifact_overlays(self):
+        env, trajectory = self._make_renderer_inputs()
+        path_overlay = np.zeros((2, 1, 1, 3, 2))
+        path_overlay[:, 0, 0, :, 0] = np.array([[0.0, 0.4, 0.8], [0.1, 0.5, 0.9]])
+        path_overlay[:, 0, 0, :, 1] = np.array([[0.0, 0.1, 0.0], [0.2, 0.3, 0.2]])
+        sample_overlay = np.repeat(path_overlay[:, :, :, None, :, :], 2, axis=3)
+        sample_values = np.ones(sample_overlay.shape[:-1])
+        sample_values[..., 1, :] *= 2.0
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = pathlib.Path(tmpdir) / "artifacts.html"
+            WebRenderer(env).render(
+                trajectory,
+                output_path=output,
+                artifacts={
+                    "overlays": [
+                        {
+                            "id": "selected",
+                            "label": "selected path",
+                            "type": "paths",
+                            "points": path_overlay,
+                            "color": "#ff0000",
+                        },
+                        {
+                            "id": "samples",
+                            "label": "sample paths",
+                            "type": "sample_paths",
+                            "points": sample_overlay,
+                            "values": sample_values,
+                            "value_label": "cost",
+                        },
+                    ]
+                },
+            )
+
+            html = output.read_text()
+            self.assertIn("drawArtifactOverlays", html)
+            payload = _payload_from_dashboard(output)
+            overlays = payload["artifacts"]["overlays"]
+            self.assertEqual(
+                [overlay["id"] for overlay in overlays], ["selected", "samples"]
+            )
+            self.assertEqual(overlays[0]["type"], "paths")
+            self.assertEqual(overlays[1]["type"], "sample_paths")
+            self.assertEqual(overlays[1]["valueLabel"], "cost")
+            self.assertEqual(overlays[1]["valueMin"], 1.0)
+            self.assertEqual(overlays[1]["valueMax"], 2.0)
 
     def test_web_dashboard_preserves_batched_rollouts(self):
         env, trajectory = self._make_renderer_inputs()

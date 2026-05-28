@@ -13,6 +13,7 @@ from PIL import Image
 from ..f110_env import F110Env
 
 TrajectoryLayout = Literal["auto", "step_major", "batch_major"]
+ArtifactType = Literal["paths", "sample_paths"]
 
 _DEFAULT_OUTPUT = pathlib.Path("f1tenth_gym_jax_rollout.html")
 _COLORS = [
@@ -31,11 +32,127 @@ def _finite_float(value: Any) -> float:
     return float(np.asarray(value, dtype=float))
 
 
+def _finite_float_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    return _finite_float(value)
+
+
 def _series_xy(xs: Any, ys: Any) -> list[list[float]]:
     x_arr = np.asarray(xs, dtype=float)
     y_arr = np.asarray(ys, dtype=float)
     points = np.column_stack((x_arr, y_arr))
     return np.round(points, 6).tolist()
+
+
+def _artifact_xy_points(
+    name: str,
+    points: Any,
+    expected_dims: int,
+    x_index: int,
+    y_index: int,
+) -> np.ndarray:
+    arr = np.asarray(points, dtype=float)
+    if arr.ndim != expected_dims:
+        raise ValueError(
+            f"Artifact '{name}' expected {expected_dims} dimensions, got {arr.ndim}."
+        )
+    if arr.shape[-1] <= max(x_index, y_index):
+        raise ValueError(
+            f"Artifact '{name}' does not contain x/y columns " f"{x_index}/{y_index}."
+        )
+    xy = np.stack((arr[..., x_index], arr[..., y_index]), axis=-1)
+    if not np.isfinite(xy).all():
+        raise ValueError(f"Artifact '{name}' contains non-finite coordinates.")
+    return np.round(xy, 6)
+
+
+def _normalize_artifacts(artifacts: Optional[dict[str, Any]]) -> dict[str, Any]:
+    if artifacts is None:
+        return {"overlays": []}
+    if not isinstance(artifacts, dict):
+        raise ValueError("artifacts must be a dictionary when provided.")
+
+    raw_overlays = artifacts.get("overlays", [])
+    if raw_overlays is None:
+        raw_overlays = []
+    if not isinstance(raw_overlays, list):
+        raise ValueError("artifacts['overlays'] must be a list.")
+
+    overlays = []
+    for index, raw_overlay in enumerate(raw_overlays):
+        if not isinstance(raw_overlay, dict):
+            raise ValueError("Each artifact overlay must be a dictionary.")
+
+        overlay_type: ArtifactType = raw_overlay.get("type", "paths")
+        if overlay_type not in {"paths", "sample_paths"}:
+            raise ValueError("Artifact overlay type must be 'paths' or 'sample_paths'.")
+
+        overlay_id = str(raw_overlay.get("id", f"artifact-{index}"))
+        label = str(raw_overlay.get("label", overlay_id))
+        x_index = int(raw_overlay.get("x_index", 0))
+        y_index = int(raw_overlay.get("y_index", 1))
+        expected_dims = 5 if overlay_type == "paths" else 6
+        points = _artifact_xy_points(
+            overlay_id,
+            raw_overlay.get("points"),
+            expected_dims,
+            x_index,
+            y_index,
+        )
+        step_indices = raw_overlay.get("step_indices")
+        if step_indices is None:
+            step_indices = list(range(points.shape[0]))
+        step_indices_arr = np.asarray(step_indices, dtype=int)
+        if step_indices_arr.shape != (points.shape[0],):
+            raise ValueError(
+                f"Artifact '{overlay_id}' step_indices must have shape "
+                f"({points.shape[0]},)."
+            )
+
+        values = None
+        value_min = None
+        value_max = None
+        if "values" in raw_overlay and raw_overlay["values"] is not None:
+            values_arr = np.asarray(raw_overlay["values"], dtype=float)
+            expected_shape = points.shape[:-1]
+            if values_arr.shape != expected_shape:
+                raise ValueError(
+                    f"Artifact '{overlay_id}' values shape {values_arr.shape} "
+                    f"does not match expected shape {expected_shape}."
+                )
+            if not np.isfinite(values_arr).all():
+                raise ValueError(f"Artifact '{overlay_id}' contains non-finite values.")
+            values = np.round(values_arr, 6).tolist()
+            value_min = float(values_arr.min())
+            value_max = float(values_arr.max())
+
+        overlays.append(
+            {
+                "id": overlay_id,
+                "label": label,
+                "type": overlay_type,
+                "scope": str(raw_overlay.get("scope", "playback")),
+                "visible": bool(raw_overlay.get("visible", True)),
+                "color": str(raw_overlay.get("color", "#6b7280")),
+                "lineWidth": _finite_float(raw_overlay.get("line_width", 1.6)),
+                "pointRadius": _finite_float(raw_overlay.get("point_radius", 2.4)),
+                "opacity": _finite_float(raw_overlay.get("opacity", 0.74)),
+                "valueLabel": str(raw_overlay.get("value_label", "value")),
+                "valueMode": str(raw_overlay.get("value_mode", "lower_better")),
+                "valueMin": _finite_float_or_none(
+                    raw_overlay.get("value_min", value_min)
+                ),
+                "valueMax": _finite_float_or_none(
+                    raw_overlay.get("value_max", value_max)
+                ),
+                "stepIndices": step_indices_arr.tolist(),
+                "points": points.tolist(),
+                "values": values,
+            }
+        )
+
+    return {"overlays": overlays}
 
 
 def _normalize_trajectory(
@@ -135,13 +252,20 @@ def _rollout_stats(
     return summary, per_rollout
 
 
-def _bounds(env: F110Env, traj: np.ndarray) -> dict[str, float]:
+def _bounds(
+    env: F110Env, traj: np.ndarray, artifact_payload: dict[str, Any]
+) -> dict[str, float]:
     xs = [traj[:, :, :, 0].reshape(-1)]
     ys = [traj[:, :, :, 1].reshape(-1)]
 
     for spline in (env.track.centerline, env.track.raceline):
         xs.append(np.asarray(spline.xs, dtype=float))
         ys.append(np.asarray(spline.ys, dtype=float))
+
+    for overlay in artifact_payload["overlays"]:
+        points = np.asarray(overlay["points"], dtype=float)
+        xs.append(points[..., 0].reshape(-1))
+        ys.append(points[..., 1].reshape(-1))
 
     map_width = env.track.occ_map.shape[1] * env.track.resolution
     map_height = env.track.occ_map.shape[0] * env.track.resolution
@@ -175,6 +299,7 @@ def _bounds(env: F110Env, traj: np.ndarray) -> dict[str, float]:
 def _payload(
     env: F110Env,
     traj: np.ndarray,
+    artifact_payload: dict[str, Any],
     dt: float,
     title: str,
     metadata: Optional[dict[str, Any]],
@@ -217,9 +342,10 @@ def _payload(
             "raceline": _series_xy(env.track.raceline.xs, env.track.raceline.ys),
         },
         "trajectory": np.round(traj, 6).tolist(),
+        "artifacts": artifact_payload,
         "summary": summary,
         "rolloutStats": per_rollout,
-        "bounds": _bounds(env, traj),
+        "bounds": _bounds(env, traj, artifact_payload),
         "colors": _COLORS,
         "canvas": {"width": int(canvas_width), "height": int(canvas_height)},
         "playing": bool(playing),
@@ -280,13 +406,30 @@ class WebRenderer:
         *,
         title: str | None = None,
         metadata: Optional[dict[str, Any]] = None,
+        artifacts: Optional[dict[str, Any]] = None,
     ) -> pathlib.Path:
-        """Write a standalone HTML dashboard for a rollout or batched rollouts."""
+        """Write a standalone HTML dashboard for a rollout or batched rollouts.
+
+        Parameters
+        ----------
+        trajectory
+            Rollout states to visualize.
+        output_path
+            Destination HTML path. Uses the renderer default when omitted.
+        title
+            Optional dashboard title.
+        metadata
+            Optional JSON-serializable metadata included in the payload.
+        artifacts
+            Optional overlay payload with an ``overlays`` list. Supported overlay
+            types are ``paths`` and ``sample_paths``.
+        """
         traj = _normalize_trajectory(
             trajectory,
             num_agents=self.env.num_agents,
             layout=self.trajectory_layout,
         )
+        artifact_payload = _normalize_artifacts(artifacts)
         path = (
             pathlib.Path(output_path) if output_path is not None else self.output_path
         )
@@ -295,6 +438,7 @@ class WebRenderer:
         page_payload = _payload(
             self.env,
             traj,
+            artifact_payload,
             self.dt,
             title or "F1TENTH Gym JAX Rollout Dashboard",
             metadata,
@@ -468,6 +612,10 @@ th { color: var(--muted); font-weight: 650; }
       <h3>Agents</h3>
       <div class="option-grid" id="agentOptions"></div>
     </div>
+    <div class="option-group" id="artifactOptionsGroup">
+      <h3>Artifact overlays</h3>
+      <div class="option-grid" id="artifactOptions"></div>
+    </div>
   </section>
   <section class="panel">
     <h2>Trajectory Playback</h2>
@@ -495,6 +643,7 @@ th { color: var(--muted); font-weight: 650; }
       <span id="playbackZoom">100%</span>
     </div>
     <canvas id="playback"></canvas>
+    <div class="legend" id="artifactLegend"></div>
   </section>
   <section class="panel">
     <h2>Rollout Stats</h2>
@@ -554,6 +703,7 @@ const layerLabels = {
   vehicles: "Vehicles",
 };
 const visibleAgents = payload.env.agents.map(() => true);
+const artifactVisibility = payload.artifacts.overlays.map(overlay => Boolean(overlay.visible));
 
 function fmt(value, digits = 2) {
   return Number(value).toFixed(digits);
@@ -643,6 +793,54 @@ function updateZoomLabels() {
   document.getElementById("playbackZoom").textContent = `${Math.round(viewState.playback.zoom * 100)}%`;
 }
 
+function artifactStepIndex(overlay) {
+  if (!overlay.stepIndices || overlay.stepIndices.length === 0) {
+    return Math.min(stepIndex, overlay.points.length - 1);
+  }
+  let best = 0;
+  let bestDistance = Math.abs(stepIndex - overlay.stepIndices[0]);
+  for (let i = 1; i < overlay.stepIndices.length; i += 1) {
+    const distance = Math.abs(stepIndex - overlay.stepIndices[i]);
+    if (distance < bestDistance) {
+      best = i;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+function valueFraction(value, overlay) {
+  if (value === null || value === undefined || overlay.valueMin === null || overlay.valueMax === null) {
+    return 0.5;
+  }
+  const span = Math.max(overlay.valueMax - overlay.valueMin, 1e-9);
+  const fraction = clamp((value - overlay.valueMin) / span, 0, 1);
+  return overlay.valueMode === "higher_better" ? 1 - fraction : fraction;
+}
+
+function heatColor(fraction) {
+  const stops = [
+    [37, 99, 235],
+    [34, 197, 94],
+    [245, 158, 11],
+    [220, 38, 38],
+  ];
+  const scaled = clamp(fraction, 0, 1) * (stops.length - 1);
+  const index = Math.min(stops.length - 2, Math.floor(scaled));
+  const t = scaled - index;
+  const a = stops[index];
+  const b = stops[index + 1];
+  const rgb = a.map((channel, i) => Math.round(channel + (b[i] - channel) * t));
+  return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+}
+
+function meanValue(values) {
+  if (!values || values.length === 0) {
+    return null;
+  }
+  return values.reduce((total, value) => total + Number(value), 0) / values.length;
+}
+
 function drawMap(ctx, tr) {
   if (!layerOptions.map || !payload.map.image || !mapImage.complete) {
     return;
@@ -690,6 +888,63 @@ function drawBase(ctx, tr) {
   }
 }
 
+function overlayScopeMatches(overlay, scope) {
+  return overlay.scope === scope || overlay.scope === "both";
+}
+
+function drawArtifactPoint(ctx, tr, point, color, radius) {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(tr.x(point[0]), tr.y(point[1]), radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawArtifactOverlays(ctx, tr, scope) {
+  payload.artifacts.overlays.forEach((overlay, overlayIndex) => {
+    if (!artifactVisibility[overlayIndex] || !overlayScopeMatches(overlay, scope)) {
+      return;
+    }
+    const overlayStep = artifactStepIndex(overlay);
+    const rolloutData = overlay.points[overlayStep]?.[rolloutIndex];
+    const valueData = overlay.values ? overlay.values[overlayStep]?.[rolloutIndex] : null;
+    if (!rolloutData) {
+      return;
+    }
+
+    for (let a = 0; a < payload.env.numAgents; a += 1) {
+      if (!visibleAgents[a] || !rolloutData[a]) {
+        continue;
+      }
+
+      if (overlay.type === "paths") {
+        ctx.globalAlpha = overlay.opacity;
+        drawPolyline(ctx, tr, rolloutData[a], overlay.color, overlay.lineWidth, layerOptions.labels ? overlay.label : "");
+        continue;
+      }
+
+      const samples = rolloutData[a];
+      const sampleValues = valueData ? valueData[a] : null;
+      for (let sampleIndex = 0; sampleIndex < samples.length; sampleIndex += 1) {
+        const points = samples[sampleIndex];
+        const values = sampleValues ? sampleValues[sampleIndex] : null;
+        const value = meanValue(values);
+        const color = values ? heatColor(valueFraction(value, overlay)) : overlay.color;
+        ctx.globalAlpha = overlay.opacity;
+        drawPolyline(ctx, tr, points, color, overlay.lineWidth, "");
+        if (values) {
+          for (let i = 0; i < points.length; i += 1) {
+            ctx.globalAlpha = overlay.opacity;
+            drawArtifactPoint(ctx, tr, points[i], heatColor(valueFraction(values[i], overlay)), overlay.pointRadius);
+          }
+        }
+      }
+    }
+  });
+  ctx.globalAlpha = 1;
+}
+
 function drawOverview() {
   const canvas = document.getElementById("overview");
   const { width, height, ctx } = setCanvasSize(canvas);
@@ -732,6 +987,7 @@ function drawOverview() {
     }
   }
   ctx.restore();
+  drawArtifactOverlays(ctx, tr, "overview");
 }
 
 function vehicleCorners(state) {
@@ -800,6 +1056,7 @@ function drawPlayback() {
     : null;
   const tr = makeTransform(width, height, viewState.playback, focusPoint);
   drawBase(ctx, tr);
+  drawArtifactOverlays(ctx, tr, "playback");
 
   for (let a = 0; a < payload.env.numAgents; a += 1) {
     if (!visibleAgents[a]) {
@@ -871,6 +1128,14 @@ function renderStats() {
   document.getElementById("legend").innerHTML = payload.env.agents.map((agent, index) =>
     `<span style="opacity:${visibleAgents[index] ? 1 : 0.38}"><i class="swatch" style="background:${payload.colors[index % payload.colors.length]}"></i>${agent}</span>`
   ).join("") + '<span><i class="swatch" style="background:#111827"></i>raceline</span><span><i class="swatch" style="background:#546a7b"></i>centerline</span>';
+
+  document.getElementById("artifactLegend").innerHTML = payload.artifacts.overlays.map((overlay, index) => {
+    const opacity = artifactVisibility[index] ? 1 : 0.38;
+    const range = overlay.values
+      ? ` (${overlay.valueLabel}: ${fmt(overlay.valueMin, 2)} to ${fmt(overlay.valueMax, 2)})`
+      : "";
+    return `<span style="opacity:${opacity}"><i class="swatch" style="background:${overlay.color}"></i>${overlay.label}${range}</span>`;
+  }).join("");
 }
 
 function renderOptions() {
@@ -890,6 +1155,20 @@ function renderOptions() {
     </label>
   `).join("");
 
+  const artifactGroup = document.getElementById("artifactOptionsGroup");
+  const artifactContainer = document.getElementById("artifactOptions");
+  if (payload.artifacts.overlays.length === 0) {
+    artifactGroup.style.display = "none";
+  } else {
+    artifactGroup.style.display = "";
+    artifactContainer.innerHTML = payload.artifacts.overlays.map((overlay, index) => `
+      <label class="check-option">
+        <input type="checkbox" data-artifact="${index}" ${artifactVisibility[index] ? "checked" : ""}>
+        <span><i class="swatch" style="background:${overlay.color}"></i>${overlay.label}</span>
+      </label>
+    `).join("");
+  }
+
   layerContainer.querySelectorAll("input[data-layer]").forEach(input => {
     input.addEventListener("change", event => {
       layerOptions[event.target.dataset.layer] = event.target.checked;
@@ -900,6 +1179,13 @@ function renderOptions() {
   agentContainer.querySelectorAll("input[data-agent]").forEach(input => {
     input.addEventListener("change", event => {
       visibleAgents[Number(event.target.dataset.agent)] = event.target.checked;
+      renderStats();
+      drawAll();
+    });
+  });
+  artifactContainer.querySelectorAll("input[data-artifact]").forEach(input => {
+    input.addEventListener("change", event => {
+      artifactVisibility[Number(event.target.dataset.artifact)] = event.target.checked;
       renderStats();
       drawAll();
     });

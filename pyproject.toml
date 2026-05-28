@@ -67,6 +67,7 @@ extend-exclude = '''
 [tool.isort]
 profile = "black"
 skip_glob = ["blah/*"]
+known_third_party = ["wandb"]
 
 [dependency-groups]
 dev = [

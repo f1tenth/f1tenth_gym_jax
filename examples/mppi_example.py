@@ -29,6 +29,103 @@ def _validate_positive_int(name: str, value: int) -> None:
         raise ValueError(f"{name} must be a positive integer.")
 
 
+def _artifact_step_indices(num_steps: int, stride: int, max_steps: int) -> np.ndarray:
+    _validate_positive_int("artifact_stride", stride)
+    _validate_positive_int("artifact_max_steps", max_steps)
+    if num_steps <= max_steps:
+        return np.arange(0, num_steps, stride, dtype=int)
+
+    strided = np.arange(0, num_steps, stride, dtype=int)
+    if len(strided) <= max_steps:
+        return strided
+    return np.unique(np.linspace(0, num_steps - 1, max_steps, dtype=int))
+
+
+def build_mppi_artifacts(
+    all_runner_state,
+    *,
+    num_envs: int,
+    num_agents: int,
+    artifact_stride: int = 10,
+    artifact_max_steps: int = 500,
+    artifact_max_samples: int = 25,
+) -> dict:
+    """
+    Build WebRenderer overlays for MPPI sample, selected, and reference paths.
+    """
+    _validate_positive_int("artifact_max_samples", artifact_max_samples)
+
+    sampled_states = np.asarray(all_runner_state[3])
+    selected_states = np.asarray(all_runner_state[5])
+    reference_states = np.asarray(all_runner_state[6])
+    sample_costs = np.asarray(all_runner_state[7])
+
+    num_steps = sampled_states.shape[0]
+    num_samples = sampled_states.shape[2]
+    step_indices = _artifact_step_indices(
+        num_steps,
+        stride=artifact_stride,
+        max_steps=artifact_max_steps,
+    )
+    sample_count = min(artifact_max_samples, num_samples)
+    sample_indices = np.linspace(0, num_samples - 1, sample_count, dtype=int)
+
+    sampled_states = sampled_states.reshape(
+        (num_steps, num_envs, num_agents) + sampled_states.shape[2:]
+    )
+    selected_states = selected_states.reshape(
+        (num_steps, num_envs, num_agents) + selected_states.shape[2:]
+    )
+    reference_states = reference_states.reshape(
+        (num_steps, num_envs, num_agents) + reference_states.shape[2:]
+    )
+    sample_costs = sample_costs.reshape(
+        (num_steps, num_envs, num_agents) + sample_costs.shape[2:]
+    )
+
+    return {
+        "overlays": [
+            {
+                "id": "mppi-samples",
+                "label": "MPPI samples",
+                "type": "sample_paths",
+                "scope": "playback",
+                "points": sampled_states[step_indices][:, :, :, sample_indices],
+                "values": sample_costs[step_indices][:, :, :, sample_indices],
+                "step_indices": step_indices,
+                "color": "#6b7280",
+                "line_width": 1.0,
+                "point_radius": 2.0,
+                "opacity": 0.42,
+                "value_label": "cost",
+                "value_mode": "lower_better",
+            },
+            {
+                "id": "mppi-selected",
+                "label": "MPPI selected trajectory",
+                "type": "paths",
+                "scope": "playback",
+                "points": selected_states[step_indices],
+                "step_indices": step_indices,
+                "color": "#dc2626",
+                "line_width": 3.0,
+                "opacity": 0.9,
+            },
+            {
+                "id": "mppi-reference",
+                "label": "MPPI reference trajectory",
+                "type": "paths",
+                "scope": "playback",
+                "points": reference_states[step_indices],
+                "step_indices": step_indices,
+                "color": "#16a34a",
+                "line_width": 2.2,
+                "opacity": 0.86,
+            },
+        ]
+    }
+
+
 @struct.dataclass
 class MPPIConfig:
     # mppi
@@ -209,15 +306,14 @@ class MPPI:
         ref, ind = self.get_ref(dyn_state, n_steps=self.n_steps - 1)
         cost = self.cost(states, ref)
 
-        w = jnp.tile(
-            self.weights(cost)[..., None], (1, 1, self.a_shape)
-        )  # [n_samples, n_steps, dim_a]
+        weights = self.weights(cost)
+        w = jnp.tile(weights[..., None], (1, 1, self.a_shape))
 
         a_opt = jnp.average(actions, axis=0, weights=w)  # [n_steps, dim_a]
 
         opt_states = self.rollout(a_opt, dyn_state)
 
-        return a_opt, states, actions, opt_states, ref, w[:, :, 0], rng_da
+        return a_opt, states, actions, opt_states, ref, cost, rng_da
 
 
 def run_mppi(
@@ -228,12 +324,19 @@ def run_mppi(
     plot: bool = True,
     render: bool = True,
     render_output: pathlib.Path = pathlib.Path("f1tenth_gym_jax_rollout.html"),
+    render_mppi_artifacts: bool = False,
+    artifact_stride: int = 10,
+    artifact_max_steps: int = 500,
+    artifact_max_samples: int = 25,
 ):
     _validate_positive_int("num_agents", num_agents)
     _validate_positive_int("num_envs", num_envs)
     _validate_positive_int("num_steps", num_steps)
     _validate_positive_int("config.n_steps", config.n_steps)
     _validate_positive_int("config.n_samples", config.n_samples)
+    _validate_positive_int("artifact_stride", artifact_stride)
+    _validate_positive_int("artifact_max_steps", artifact_max_steps)
+    _validate_positive_int("artifact_max_samples", artifact_max_samples)
 
     num_actors = num_agents * num_envs
     num_states = config.state_dim
@@ -337,6 +440,19 @@ def run_mppi(
         _env_step, _env_init(), length=num_steps
     )
 
+    render_artifacts = (
+        build_mppi_artifacts(
+            all_runner_state,
+            num_envs=num_envs,
+            num_agents=num_agents,
+            artifact_stride=artifact_stride,
+            artifact_max_steps=artifact_max_steps,
+            artifact_max_samples=artifact_max_samples,
+        )
+        if render and render_mppi_artifacts
+        else None
+    )
+
     if not plot and not render:
         return final_runner, all_runner_state, all_reward, all_done
 
@@ -344,6 +460,7 @@ def run_mppi(
         WebRenderer(env).render(
             np.array(all_runner_state[0].cartesian_states),
             output_path=render_output,
+            artifacts=render_artifacts,
         )
         return final_runner, all_runner_state, all_reward, all_done
 
@@ -384,6 +501,10 @@ def run_mppi(
     opt_sample = all_opt_samples[step_ind, check_ind, :, :]
     ref_sample = all_refs[step_ind, check_ind, :, :]
     cost_sample = all_costs[step_ind, check_ind, :]
+    cost_alpha = 1.0 - (cost_sample - cost_sample.min()) / (
+        cost_sample.max() - cost_sample.min() + config.damping
+    )
+    cost_alpha = jnp.clip(cost_alpha, 0.05, 0.95)
 
     zoom = 15
     for i in range(config.n_samples):
@@ -401,7 +522,7 @@ def run_mppi(
             s=10,
             color="blue",
             marker="o",
-            alpha=cost_sample[i, :],
+            alpha=cost_alpha[i, :],
         )
     plt.plot(opt_sample[:, 0], opt_sample[:, 1], "x-", markersize=3, color="red")
     plt.plot(ref_sample[:, 0], ref_sample[:, 1], "o", markersize=5, color="green")
@@ -440,7 +561,7 @@ def run_mppi(
             s=10,
             color="blue",
             marker="o",
-            alpha=cost_sample[i, :],
+            alpha=cost_alpha[i, :],
         )
         ax[1].scatter(
             jnp.arange(config.n_steps),
@@ -448,7 +569,7 @@ def run_mppi(
             s=10,
             color="blue",
             marker="o",
-            alpha=cost_sample[i, :],
+            alpha=cost_alpha[i, :],
         )
         ax[2].scatter(
             jnp.arange(config.n_steps),
@@ -456,7 +577,7 @@ def run_mppi(
             s=10,
             color="blue",
             marker="o",
-            alpha=cost_sample[i, :],
+            alpha=cost_alpha[i, :],
         )
         ax[3].scatter(
             jnp.arange(config.n_steps),
@@ -464,7 +585,7 @@ def run_mppi(
             s=10,
             color="blue",
             marker="o",
-            alpha=cost_sample[i, :],
+            alpha=cost_alpha[i, :],
         )
         ax[4].scatter(
             jnp.arange(config.n_steps),
@@ -472,7 +593,7 @@ def run_mppi(
             s=10,
             color="blue",
             marker="o",
-            alpha=cost_sample[i, :],
+            alpha=cost_alpha[i, :],
         )
         ax[5].scatter(
             jnp.arange(config.n_steps),
@@ -480,7 +601,7 @@ def run_mppi(
             s=10,
             color="blue",
             marker="o",
-            alpha=cost_sample[i, :],
+            alpha=cost_alpha[i, :],
         )
     plt.show()
 
@@ -488,6 +609,7 @@ def run_mppi(
         WebRenderer(env).render(
             np.array(all_runner_state[0].cartesian_states),
             output_path=render_output,
+            artifacts=render_artifacts,
         )
 
     return final_runner, all_runner_state, all_reward, all_done
@@ -513,6 +635,29 @@ def main():
         default=pathlib.Path("f1tenth_gym_jax_rollout.html"),
         help="Output HTML dashboard path.",
     )
+    parser.add_argument(
+        "--render-mppi-artifacts",
+        action="store_true",
+        help="Overlay MPPI sampled, selected, and reference trajectories.",
+    )
+    parser.add_argument(
+        "--artifact-stride",
+        type=int,
+        default=10,
+        help="Keep every Nth environment step for MPPI overlays.",
+    )
+    parser.add_argument(
+        "--artifact-max-steps",
+        type=int,
+        default=500,
+        help="Maximum number of environment steps embedded in MPPI overlays.",
+    )
+    parser.add_argument(
+        "--artifact-max-samples",
+        type=int,
+        default=25,
+        help="Maximum number of MPPI sampled trajectories embedded per actor.",
+    )
     args = parser.parse_args()
 
     config = MPPIConfig(n_samples=args.num_samples, n_steps=args.horizon)
@@ -524,6 +669,10 @@ def main():
         plot=not args.no_plots,
         render=not args.no_render,
         render_output=args.render_output,
+        render_mppi_artifacts=args.render_mppi_artifacts,
+        artifact_stride=args.artifact_stride,
+        artifact_max_steps=args.artifact_max_steps,
+        artifact_max_samples=args.artifact_max_samples,
     )
 
 

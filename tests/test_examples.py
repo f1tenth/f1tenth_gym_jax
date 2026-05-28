@@ -343,6 +343,40 @@ class TestExamples(unittest.TestCase):
         self.assertTrue(np.isfinite(trajectory).all())
         self.assertTrue(np.isfinite(np.asarray(all_reward)).all())
 
+    def test_mppi_example_renders_artifact_overlays(self):
+        mppi_example = _load_example_module("mppi_example")
+        config = mppi_example.MPPIConfig(n_samples=2, n_steps=2)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = pathlib.Path(tmpdir) / "mppi.html"
+            mppi_example.run_mppi(
+                num_agents=1,
+                num_envs=1,
+                num_steps=1,
+                config=config,
+                plot=False,
+                render=True,
+                render_output=output,
+                render_mppi_artifacts=True,
+                artifact_stride=1,
+                artifact_max_steps=1,
+                artifact_max_samples=2,
+            )
+
+            html = output.read_text()
+            marker = '<script id="rollout-data" type="application/json">'
+            start = html.index(marker) + len(marker)
+            end = html.index("</script>", start)
+            payload = json.loads(html[start:end])
+
+        overlays = payload["artifacts"]["overlays"]
+        self.assertEqual(
+            [overlay["id"] for overlay in overlays],
+            ["mppi-samples", "mppi-selected", "mppi-reference"],
+        )
+        self.assertEqual(overlays[0]["type"], "sample_paths")
+        self.assertEqual(overlays[0]["valueLabel"], "cost")
+
     def test_mppi_example_rejects_non_positive_counts(self):
         mppi_example = _load_example_module("mppi_example")
 

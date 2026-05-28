@@ -12,13 +12,13 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import optax
+import wandb
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 from flax.traverse_util import flatten_dict, unflatten_dict
 from safetensors.flax import load_file, save_file
 from tqdm.auto import tqdm
 
-import wandb
 from f1tenth_gym_jax import make
 from f1tenth_gym_jax.envs.utils import LogWrapper, batchify, unbatchify
 

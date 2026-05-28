@@ -66,6 +66,13 @@ class DynamicsTest(unittest.TestCase):
         self.assertTrue(bool(jnp.all(jnp.isfinite(switching))))
         self.assertTrue(bool(jnp.all(jnp.isfinite(smooth))))
 
+    def test_smooth_single_track_dynamics_are_finite_at_zero_speed(self):
+        x_and_u = jnp.array([0.0, 0.0, 0.05, 0.0, 0.1, 0.0, 0.0, 0.2, 0.5])
+        derivative = vehicle_dynamics_st_smooth(x_and_u, self.params)
+
+        self.assertEqual(derivative.shape, (9,))
+        self.assertTrue(bool(jnp.all(jnp.isfinite(derivative))))
+
     def test_pid_helpers(self):
         self.assertAlmostEqual(float(pid_steer(0.2, 0.0, 3.2)), 3.2)
         self.assertAlmostEqual(float(pid_steer(-0.2, 0.0, 3.2)), -3.2)

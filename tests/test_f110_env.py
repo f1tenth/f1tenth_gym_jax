@@ -144,6 +144,19 @@ class TestF110Env(unittest.TestCase):
         expected_reward = -env.params.timestep * env.params.timestep_ratio
         self.assertAlmostEqual(float(rewards["agent_0"]), expected_reward)
 
+    def test_smooth_single_track_model_steps_from_rest(self):
+        env = make(
+            "Spielberg_1_noscan_nocollision_progress_acceleration+steeringvelocity_1_5_v0",
+            model="st_smooth",
+        )
+        _, state = env.reset(jax.random.key(0))
+        actions = {"agent_0": jnp.array([0.0, 1.0])}
+
+        _, next_state, rewards, _, _ = env.step(jax.random.key(1), state, actions)
+
+        self.assertTrue(bool(jnp.all(jnp.isfinite(next_state.cartesian_states))))
+        self.assertTrue(bool(jnp.isfinite(rewards["agent_0"])))
+
     def test_invalid_reward_override_is_rejected(self):
         with self.assertRaises(ValueError):
             make(

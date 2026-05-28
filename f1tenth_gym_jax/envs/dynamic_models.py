@@ -389,7 +389,7 @@ def vehicle_dynamics_st_smooth(x_and_u: chex.Array, params: Param) -> chex.Array
     """
     # States
     DELTA = x_and_u[2]
-    V = x_and_u[3]
+    V = jnp.clip(x_and_u[3], min=0.001)
     PSI = x_and_u[4]
     PSI_DOT = x_and_u[5]
     BETA = x_and_u[6]

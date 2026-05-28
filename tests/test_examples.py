@@ -131,6 +131,7 @@ class TestExamples(unittest.TestCase):
                 for fragment in _BANNED_STALE_EXAMPLE_FRAGMENTS:
                     self.assertNotIn(fragment, source)
                 self.assertNotIn("[:, 100,", source)
+                self.assertNotIn("reshape((num_agents, num_envs, -1))", source)
 
                 for cell in notebook["cells"]:
                     if cell["cell_type"] == "code":

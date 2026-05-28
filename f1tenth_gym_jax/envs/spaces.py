@@ -33,7 +33,8 @@ class Discrete(Space):
     """
 
     def __init__(self, num_categories: int, dtype=jnp.int32):
-        assert num_categories >= 0
+        if num_categories < 1:
+            raise ValueError("Discrete spaces must have at least one category.")
         self.n = num_categories
         self.shape = ()
         self.dtype = dtype
@@ -46,8 +47,9 @@ class Discrete(Space):
 
     def contains(self, x: jnp.int_) -> bool:
         """Check whether specific object is within space."""
-        # type_cond = isinstance(x, self.dtype)
-        # shape_cond = (x.shape == self.shape)
+        x = jnp.asarray(x)
+        if x.shape != self.shape:
+            return False
         range_cond = jnp.logical_and(x >= 0, x < self.n)
         return range_cond
 
@@ -59,6 +61,8 @@ class MultiDiscrete(Space):
 
     def __init__(self, num_categories: Sequence[int]):
         """Num categories is the number of cat actions for each dim, [2,2,2]=2 actions x 3 dim"""
+        if any(n < 1 for n in num_categories):
+            raise ValueError("MultiDiscrete categories must all be positive.")
         self.num_categories = jnp.array(num_categories)
         self.shape = (len(num_categories),)
         self.dtype = jnp.int_
@@ -75,6 +79,9 @@ class MultiDiscrete(Space):
 
     def contains(self, x: jnp.int_) -> bool:
         """Check whether specific object is within space."""
+        x = jnp.asarray(x)
+        if x.shape != self.shape:
+            return False
         range_cond = jnp.logical_and(x >= 0, x < self.num_categories)
         return jnp.all(range_cond)
 
@@ -92,10 +99,10 @@ class Box(Space):
         shape: Tuple[int],
         dtype: jnp.dtype = jnp.float32,
     ):
-        self.low = low
-        self.high = high
         self.shape = shape
         self.dtype = dtype
+        self.low = jnp.broadcast_to(jnp.asarray(low, dtype=dtype), shape)
+        self.high = jnp.broadcast_to(jnp.asarray(high, dtype=dtype), shape)
 
     def sample(self, rng: chex.PRNGKey) -> chex.Array:
         """Sample random action uniformly from 1D continuous range."""
@@ -105,8 +112,9 @@ class Box(Space):
 
     def contains(self, x: jnp.int_) -> bool:
         """Check whether specific object is within space."""
-        # type_cond = isinstance(x, self.dtype)
-        # shape_cond = (x.shape == self.shape)
+        x = jnp.asarray(x)
+        if x.shape != self.shape:
+            return False
         range_cond = jnp.logical_and(jnp.all(x >= self.low), jnp.all(x <= self.high))
         return range_cond
 
@@ -130,13 +138,14 @@ class Dict(Space):
 
     def contains(self, x: jnp.int_) -> bool:
         """Check whether dimensions of object are within subspace."""
-        # type_cond = isinstance(x, dict)
-        # num_space_cond = len(x) != len(self.spaces)
-        # Check for each space individually
-        out_of_space = 0
+        if not isinstance(x, dict) or set(x) != set(self.spaces):
+            return False
+        out_of_space = False
         for k, space in self.spaces.items():
-            out_of_space += 1 - space.contains(getattr(x, k))
-        return out_of_space == 0
+            out_of_space = jnp.logical_or(
+                out_of_space, jnp.logical_not(space.contains(x[k]))
+            )
+        return jnp.logical_not(out_of_space)
 
 
 class Tuple(Space):
@@ -155,10 +164,11 @@ class Tuple(Space):
 
     def contains(self, x: jnp.int_) -> bool:
         """Check whether dimensions of object are within subspace."""
-        # type_cond = isinstance(x, tuple)
-        # num_space_cond = len(x) != len(self.spaces)
-        # Check for each space individually
-        out_of_space = 0
-        for space in self.spaces:
-            out_of_space += 1 - space.contains(x)
-        return out_of_space == 0
+        if not isinstance(x, tuple) or len(x) != self.num_spaces:
+            return False
+        out_of_space = False
+        for value, space in zip(x, self.spaces):
+            out_of_space = jnp.logical_or(
+                out_of_space, jnp.logical_not(space.contains(value))
+            )
+        return jnp.logical_not(out_of_space)

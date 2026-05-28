@@ -30,7 +30,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://f1tenth.org"
 Repository = "https://github.com/f1tenth/f1tenth_gym_jax"
-Documentation = "https://github.com/f1tenth/f1tenth_gym_jax/tree/main/docs"
+Documentation = "https://f1tenth-gym-jax.readthedocs.io/"
 
 [project.optional-dependencies]
 cuda = [

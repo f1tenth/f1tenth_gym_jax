@@ -1,6 +1,7 @@
 ![CI](https://github.com/f1tenth/f1tenth_gym_jax/actions/workflows/ci.yml/badge.svg)
 ![Docker](https://github.com/f1tenth/f1tenth_gym_jax/actions/workflows/docker.yml/badge.svg)
 ![Lint](https://github.com/f1tenth/f1tenth_gym_jax/actions/workflows/lint.yml/badge.svg)
+[![Documentation Status](https://readthedocs.org/projects/f1tenth-gym-jax/badge/?version=latest)](https://f1tenth-gym-jax.readthedocs.io/en/latest/?badge=latest)
 
 # F1TENTH Gym JAX
 
@@ -55,6 +56,9 @@ Longer example usage lives in:
 - `examples/eval_ppo_example.py`
 - `examples/waypoint_follow.py`
 - `examples/mppi_example.py`
+- `examples/render_dashboard.py`
+- `examples/run_in_empty_track.py`
+- `examples/random_trackgen.py`
 
 ## Environment IDs
 

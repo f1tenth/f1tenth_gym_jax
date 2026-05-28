@@ -14,6 +14,18 @@ class TestMetadata(unittest.TestCase):
 
         self.assertEqual(f1tenth_gym_jax.__version__, metadata["version"])
 
+    def test_documentation_links_target_readthedocs(self):
+        repo_root = pathlib.Path(__file__).parent.parent
+        metadata = tomllib.loads((repo_root / "pyproject.toml").read_text())["project"]
+        readme = (repo_root / "README.md").read_text()
+
+        self.assertEqual(
+            metadata["urls"]["Documentation"],
+            "https://f1tenth-gym-jax.readthedocs.io/",
+        )
+        self.assertIn("readthedocs.org/projects/f1tenth-gym-jax/badge", readme)
+        self.assertIn("f1tenth-gym-jax.readthedocs.io/en/latest", readme)
+
     def test_ci_test_job_installs_extras_used_by_tested_examples(self):
         workflow_path = (
             pathlib.Path(__file__).parent.parent / ".github/workflows/ci.yml"

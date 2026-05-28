@@ -117,6 +117,28 @@ class TestTrack(unittest.TestCase):
                 centerline = np.loadtxt(file_centerline, delimiter=",")
                 self.assertEqual(centerline.shape[1], 4)
 
+    def test_from_numpy_respects_s_frame_max(self):
+        track_name = "Spielberg"
+        track_dir = find_track_dir(track_name)
+        waypoints = np.loadtxt(
+            track_dir / f"{track_name}_raceline.csv", delimiter=";"
+        ).astype(np.float32)
+
+        track = Track.from_numpy(waypoints, s_frame_max=123.0, downsample_step=50)
+
+        self.assertEqual(track.s_frame_max, 123.0)
+        self.assertEqual(track.waypoints.shape, waypoints.shape)
+
+    def test_invalid_track_inputs_raise_explicit_errors(self):
+        with self.assertRaises(ValueError):
+            Track(np.zeros(2), np.zeros(3))
+
+        with self.assertRaises(ValueError):
+            Track.from_numpy(np.zeros((2, 6)), s_frame_max=1.0)
+
+        with self.assertRaises(FileNotFoundError):
+            Track.from_raceline_file(pathlib.Path("missing_raceline.csv"))
+
     def test_frenet_to_cartesian(self):
         track_name = "Spielberg"
         track = Track.from_track_name(track_name)

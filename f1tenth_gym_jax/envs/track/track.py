@@ -71,7 +71,8 @@ class Track:
         self.waypoints = waypoints
         # self.s_frame_max = s_frame_max
 
-        assert xs.shape == ys.shape, "inconsistent shapes for x, y"
+        if xs.shape != ys.shape:
+            raise ValueError("inconsistent shapes for x, y")
 
         self.n = xs.shape[0]
         self.ss = ss
@@ -92,7 +93,9 @@ class Track:
         # approximate track length by linear-interpolation of x,y waypoints
         # note: we could use 'ss' but sometimes it is normalized to [0,1], so we recompute it here
         self.length = float(np.sum(np.sqrt(np.diff(xs) ** 2 + np.diff(ys) ** 2)))
-        self.s_frame_max = self.length
+        self.s_frame_max = (
+            float(s_frame_max) if s_frame_max is not None else self.length
+        )
 
         self.centerline = centerline or CubicSplineND(
             xs, ys, psis, kappas, velxs, accxs
@@ -105,9 +108,8 @@ class Track:
         # find track dir
         track_dir = find_track_dir(map_name)
         # load map yaml
-        map_metadata = yaml.safe_load(
-            open(str(track_dir / f"{track_dir.stem}.yaml"), "r")
-        )
+        with (track_dir / f"{track_dir.stem}.yaml").open() as yaml_file:
+            map_metadata = yaml.safe_load(yaml_file)
         resolution = map_metadata["resolution"]
         ox = map_metadata["origin"][0]
         oy = map_metadata["origin"][1]
@@ -128,9 +130,10 @@ class Track:
             cl_data = np.loadtxt(
                 track_dir / f"{map_name}_centerline.csv", delimiter=","
             )
-            assert (
-                cl_data.shape[1] == 4
-            ), "expected centerline columns as [x, y, w_left, w_right]"
+            if cl_data.shape[1] != 4:
+                raise ValueError(
+                    "expected centerline columns as [x, y, w_left, w_right]"
+                )
             cl_xs, cl_ys = cl_data[:, 0], cl_data[:, 1]
             cl_psis = _calc_yaw_from_xy(cl_xs, cl_ys)
             cl_xs = np.append(cl_xs, cl_xs[0])
@@ -139,15 +142,15 @@ class Track:
             centerline = CubicSplineND(cl_xs, cl_ys, cl_psis)
         else:
             raise ValueError("At least centerline file is expected to construct track.")
-            centerline = None
 
-        # if exist loat raceline
+        # if exist load raceline
         if (track_dir / f"{map_name}_raceline.csv").exists():
             # get raceline spline here
             rl_data = np.loadtxt(track_dir / f"{map_name}_raceline.csv", delimiter=";")
-            assert (
-                rl_data.shape[1] == 7
-            ), "expected centerline columns as [s, x, y, psi, kappa, vx, ax]"
+            if rl_data.shape[1] != 7:
+                raise ValueError(
+                    "expected raceline columns as [s, x, y, psi, kappa, vx, ax]"
+                )
             xs, ys, psis, kappas, vxs, axs = (
                 rl_data[:, 1],
                 rl_data[:, 2],
@@ -192,9 +195,8 @@ class Track:
         track: Track
             track object
         """
-        assert (
-            waypoints.shape[1] >= 7
-        ), "expected waypoints as [s, x, y, psi, k, vx, ax]"
+        if waypoints.shape[1] < 7:
+            raise ValueError("expected waypoints as [s, x, y, psi, k, vx, ax]")
 
         xs = waypoints[::downsample_step, 1]
         ys = waypoints[::downsample_step, 2]
@@ -241,11 +243,11 @@ class Track:
         track: Track
             track object
         """
-        assert filepath.exists(), f"input filepath does not exist ({filepath})"
+        if not filepath.exists():
+            raise FileNotFoundError(f"input filepath does not exist ({filepath})")
         waypoints = np.loadtxt(filepath, delimiter=delimiter).astype(np.float32)
-        assert (
-            waypoints.shape[1] >= 7
-        ), "expected waypoints as [s, x, y, psi, k, vx, ax]"
+        if waypoints.shape[1] < 7:
+            raise ValueError("expected waypoints as [s, x, y, psi, k, vx, ax]")
 
         xs = waypoints[::downsample_step, 1]
         ys = waypoints[::downsample_step, 2]

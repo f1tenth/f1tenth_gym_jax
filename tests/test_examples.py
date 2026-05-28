@@ -1,3 +1,4 @@
+import ast
 import importlib.util
 import json
 import pathlib
@@ -9,6 +10,7 @@ import numpy as np
 import yaml
 
 from f1tenth_gym_jax import make
+from f1tenth_gym_jax.registration import _parse_scenario
 
 
 def _load_example_module(name: str):
@@ -19,7 +21,90 @@ def _load_example_module(name: str):
     return module
 
 
+def _evaluate_train_config_default(node: ast.AST, values: dict[str, object]) -> object:
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.Name):
+        return values[node.id]
+    if isinstance(node, ast.JoinedStr):
+        parts = []
+        for value in node.values:
+            if isinstance(value, ast.Constant):
+                parts.append(str(value.value))
+            elif isinstance(value, ast.FormattedValue):
+                parts.append(str(_evaluate_train_config_default(value.value, values)))
+            else:
+                raise ValueError(f"Unsupported f-string value: {ast.dump(value)}")
+        return "".join(parts)
+    raise ValueError(f"Unsupported TrainConfig default: {ast.dump(node)}")
+
+
+def _read_train_config_defaults() -> dict[str, object]:
+    path = pathlib.Path(__file__).parent.parent / "examples" / "train_ppo_example.py"
+    tree = ast.parse(path.read_text(), filename=str(path))
+    train_config = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "TrainConfig"
+    )
+
+    values = {}
+    for node in train_config.body:
+        if not isinstance(node, ast.AnnAssign) or not isinstance(node.target, ast.Name):
+            continue
+        if node.target.id not in {"num_agents", "env_name", "run_name"}:
+            continue
+        values[node.target.id] = _evaluate_train_config_default(node.value, values)
+
+    return values
+
+
+def _ppo_artifact_pairs() -> dict[tuple[str, str], set[str]]:
+    artifact_dir = pathlib.Path(__file__).parent.parent / "trained_models_ppo"
+    artifacts = {}
+    for path in sorted(artifact_dir.glob("*/*_params.safetensors")):
+        for kind in ("actor", "critic"):
+            suffix = f"_{kind}_params.safetensors"
+            if path.name.endswith(suffix):
+                env_name = path.name.removesuffix(suffix)
+                artifacts.setdefault((path.parent.name, env_name), set()).add(kind)
+                break
+        else:
+            raise AssertionError(f"Unexpected PPO artifact name: {path}")
+    return artifacts
+
+
 class TestExamples(unittest.TestCase):
+    def test_ppo_train_config_default_model_files_are_checked_in(self):
+        defaults = _read_train_config_defaults()
+        _parse_scenario(defaults["env_name"])
+
+        model_stem = (
+            pathlib.Path(__file__).parent.parent
+            / "trained_models_ppo"
+            / defaults["run_name"]
+            / defaults["env_name"]
+        )
+        self.assertTrue(
+            model_stem.with_name(
+                f"{model_stem.name}_actor_params.safetensors"
+            ).is_file()
+        )
+        self.assertTrue(
+            model_stem.with_name(
+                f"{model_stem.name}_critic_params.safetensors"
+            ).is_file()
+        )
+
+    def test_ppo_trained_model_artifacts_are_paired_and_parseable(self):
+        artifacts = _ppo_artifact_pairs()
+        self.assertGreater(len(artifacts), 0)
+
+        for (run_name, env_name), kinds in artifacts.items():
+            with self.subTest(run_name=run_name, env_name=env_name):
+                self.assertEqual(kinds, {"actor", "critic"})
+                _parse_scenario(env_name)
+
     def test_notebook_examples_use_current_jax_environment_api(self):
         examples_dir = pathlib.Path(__file__).parent.parent / "examples"
         banned_fragments = (

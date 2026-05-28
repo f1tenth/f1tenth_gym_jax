@@ -1,4 +1,3 @@
-# flake8: noqa
 import os
 import tomllib
 from pathlib import Path
@@ -13,21 +12,8 @@ PROJECT_METADATA = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text())[
 source_suffix = ".rst"
 source_encoding = "utf-8-sig"
 
-# -- Language ----------------------------------------------------------------
-env_tags = os.getenv("SPHINX_TAGS")
-if env_tags is not None:
-    for tag in env_tags.split(","):
-        print("Adding Sphinx tag: %s" % tag.strip())
-        tags.add(tag.strip())
-
-language = os.getenv("READTHEDOCS_LANGUAGE", "en")
-is_i18n = tags.has("i18n")
-
 # -- Theme -------------------------------------------------------------------
-on_rtd = os.environ.get("READTHEDOCS", None) == "True"
 html_theme = "sphinx_rtd_theme"
-if on_rtd:
-    using_rtd_theme = True
 html_theme_options = {
     # 'typekit_id': 'hiw1hhg',
     # 'analytics_id': '',
@@ -39,7 +25,7 @@ html_theme_options = {
     # 'navigation_depth': 4,  # Depth of the headers shown in the navigation bar
 }
 html_context = {
-    "display_github": not is_i18n,  # Integrate GitHub
+    "display_github": True,  # Integrate GitHub
     "github_user": "f1tenth",  # Username
     "github_repo": "f1tenth_gym_jax",  # Repo name
     "github_version": "main",  # Version

@@ -27,6 +27,11 @@ dependencies = [
     "pyopengl>=3.1.9,<4",
     "pillow>=11.2.1,<12",
     "jax-pf",
+    "distrax>=0.1.5",
+    "safetensors>=0.6.2",
+    "tqdm>=4.67.1",
+    "torch>=2.8.0",
+    "wandb>=0.22.1",
 ]
 
 [project.urls]

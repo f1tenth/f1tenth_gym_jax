@@ -158,6 +158,16 @@ class TestExamples(unittest.TestCase):
                 self.assertEqual(kinds, {"actor", "critic"})
                 _parse_scenario(env_name)
 
+    def test_ppo_trained_model_artifacts_use_canonical_env_ids(self):
+        artifacts = _ppo_artifact_pairs()
+
+        for run_name, env_name in artifacts:
+            with self.subTest(run_name=run_name, env_name=env_name):
+                self.assertNotRegex(
+                    env_name,
+                    r"_(?:acceleration|velocity)\+(?:steeringvelocity|steeringangle)_v0$",
+                )
+
     def test_notebook_examples_use_current_jax_environment_api(self):
         examples_dir = pathlib.Path(__file__).parent.parent / "examples"
 

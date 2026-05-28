@@ -1,1 +1,3 @@
-from .f110_env import F110Env  # noqa: F401 This is needed to make easy imports work
+from .f110_env import F110Env
+
+__all__ = ["F110Env"]

@@ -166,6 +166,12 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(trajectory.shape, (1, 1, 1, 7))
         self.assertTrue(np.isfinite(trajectory).all())
 
+    def test_empty_track_example_rejects_non_positive_steps(self):
+        run_in_empty_track = _load_example_module("run_in_empty_track")
+
+        with self.assertRaisesRegex(ValueError, "num_steps must be positive"):
+            run_in_empty_track.rollout(num_steps=0, render=False)
+
     def test_waypoint_follow_example_runs_without_rendering(self):
         waypoint_follow = _load_example_module("waypoint_follow")
 

@@ -16,6 +16,9 @@ def rollout(num_steps: int | None = None, render: bool = True):
     """
     Run a simple collision-free rollout with the current JAX environment API.
     """
+    if num_steps is not None and num_steps < 1:
+        raise ValueError("num_steps must be positive when provided.")
+
     env = make(
         "Spielberg_1_noscan_nocollision_progress_acceleration+steeringvelocity_1_100_v0"
     )

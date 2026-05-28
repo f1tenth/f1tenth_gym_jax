@@ -76,7 +76,7 @@ class Param:
     length: float = 0.58  # length of the vehicle in meters
     timestep: float = 0.01  # physical time steps of the dynamics model
     timestep_ratio: int = 1  # number of simulation steps per control step
-    longitudinal_action_type: str = "acceleration"  # ["acceleration", "speed"]
+    longitudinal_action_type: str = "acceleration"  # ["acceleration", "velocity"]
     steering_action_type: str = (
         "steeringvelocity"  # ["steeringangle", "steeringvelocity"]
     )

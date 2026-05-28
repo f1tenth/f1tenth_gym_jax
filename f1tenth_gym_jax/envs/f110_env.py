@@ -98,10 +98,30 @@ class F110Env(MultiAgentEnv):
                 )
             )
 
-        # spaces
-        # TODO: this is now bounded by maximum acceleration
+        if params.steering_action_type == "steeringvelocity":
+            steering_bounds = (params.sv_min, params.sv_max)
+        elif params.steering_action_type == "steeringangle":
+            steering_bounds = (params.s_min, params.s_max)
+        else:
+            raise ValueError(
+                f"Chosen steering action type {params.steering_action_type} is invalid. "
+                "Choose either 'steeringvelocity' or 'steeringangle'."
+            )
+
+        if params.longitudinal_action_type == "acceleration":
+            longitudinal_bounds = (-params.a_max, params.a_max)
+        elif params.longitudinal_action_type == "velocity":
+            longitudinal_bounds = (params.v_min, params.v_max)
+        else:
+            raise ValueError(
+                f"Chosen longitudinal action type {params.longitudinal_action_type} is invalid. "
+                "Choose either 'acceleration' or 'velocity'."
+            )
+
+        action_low = jnp.array([steering_bounds[0], longitudinal_bounds[0]])
+        action_high = jnp.array([steering_bounds[1], longitudinal_bounds[1]])
         self.action_spaces = {
-            i: Box(-self.params.a_max, self.params.a_max, (2,)) for i in self.agents
+            i: Box(action_low, action_high, (2,)) for i in self.agents
         }
 
         # scanning or not

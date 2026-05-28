@@ -65,3 +65,51 @@ class TestF110Env(unittest.TestCase):
 
         self.assertTrue(done)
         self.assertEqual(int(state.step), 0)
+
+    def test_action_space_matches_acceleration_steeringvelocity_controls(self):
+        env = make(BASE_ENV_ID)
+        action_space = env.action_space("agent_0")
+
+        self.assertEqual(action_space.shape, (2,))
+        self.assertTrue(
+            bool(
+                jnp.allclose(
+                    action_space.low, jnp.array([env.params.sv_min, -env.params.a_max])
+                )
+            )
+        )
+        self.assertTrue(
+            bool(
+                jnp.allclose(
+                    action_space.high, jnp.array([env.params.sv_max, env.params.a_max])
+                )
+            )
+        )
+
+        action = action_space.sample(jax.random.key(0))
+        self.assertTrue(bool(action_space.contains(action)))
+
+    def test_action_space_matches_velocity_steeringangle_controls(self):
+        env = make(
+            "Spielberg_1_noscan_nocollision_progress_velocity+steeringangle_1_5_v0"
+        )
+        action_space = env.action_space("agent_0")
+
+        self.assertEqual(action_space.shape, (2,))
+        self.assertTrue(
+            bool(
+                jnp.allclose(
+                    action_space.low, jnp.array([env.params.s_min, env.params.v_min])
+                )
+            )
+        )
+        self.assertTrue(
+            bool(
+                jnp.allclose(
+                    action_space.high, jnp.array([env.params.s_max, env.params.v_max])
+                )
+            )
+        )
+
+        action = action_space.sample(jax.random.key(1))
+        self.assertTrue(bool(action_space.contains(action)))

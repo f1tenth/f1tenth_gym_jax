@@ -644,7 +644,6 @@ dev = [
     { name = "flake8" },
     { name = "ipykernel" },
     { name = "isort" },
-    { name = "matplotlib" },
     { name = "pytest" },
 ]
 
@@ -679,7 +678,6 @@ dev = [
     { name = "flake8", specifier = ">=7.0.0,<8" },
     { name = "ipykernel", specifier = ">=6.29.0,<7" },
     { name = "isort", specifier = ">=5.13.2,<6" },
-    { name = "matplotlib", specifier = ">=3.8.2,<4" },
     { name = "pytest", specifier = ">=7.4.4,<8" },
 ]
 

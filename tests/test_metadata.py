@@ -52,6 +52,22 @@ class TestMetadata(unittest.TestCase):
             )
         )
 
+    def test_plotting_dependencies_belong_to_examples_extra(self):
+        pyproject = pathlib.Path(__file__).parent.parent / "pyproject.toml"
+        metadata = tomllib.loads(pyproject.read_text())
+        examples_dependencies = metadata["project"]["optional-dependencies"]["examples"]
+        dev_dependencies = metadata["dependency-groups"]["dev"]
+
+        self.assertTrue(
+            any(
+                dependency.startswith("matplotlib")
+                for dependency in examples_dependencies
+            )
+        )
+        self.assertFalse(
+            any(dependency.startswith("matplotlib") for dependency in dev_dependencies)
+        )
+
     def test_readthedocs_uses_sphinx_with_uv_docs_extra(self):
         repo_root = pathlib.Path(__file__).parent.parent
         config = yaml.safe_load((repo_root / ".readthedocs.yaml").read_text())

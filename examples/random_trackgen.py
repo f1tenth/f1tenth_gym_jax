@@ -38,6 +38,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import shapely.geometry as shp
 
+TRACK_WIDTH = 10.0
+
 
 def main(args):
     n_maps = args.n_maps
@@ -49,12 +51,13 @@ def main(args):
     outdir.mkdir(parents=True, exist_ok=True)
 
     for i in range(n_maps):
+        track_name = f"RandomTrack{i}"
         while True:
             try:
-                print(f"[info] creating track {i}")
+                print(f"[info] creating track {track_name}")
                 track, track_int, track_ext = create_track()
-                convert_track(track, track_int, track_ext, i, outdir)
-                print(f"[info] saved track {i} in {outdir}/")
+                convert_track(track, track_int, track_ext, track_name, outdir)
+                print(f"[info] saved track {track_name} in {outdir / track_name}/")
                 break
             except Exception as _:  # noqa: F841
                 print("[error] failed to create track. Retrying...")
@@ -68,7 +71,7 @@ def create_track():
     TRACK_RAD = 900 / SCALE
     TRACK_DETAIL_STEP = 21 / SCALE
     TRACK_TURN_RATE = 0.31
-    WIDTH = 10.0
+    WIDTH = TRACK_WIDTH
 
     start_alpha = 0.0
 
@@ -191,8 +194,11 @@ def create_track():
     return track_xy, track_xy_offset_in_np, track_xy_offset_out_np
 
 
-def convert_track(track, track_int, track_ext, track_id, outdir):
-    # converts track to image and saves the centerline as waypoints
+def convert_track(track, track_int, track_ext, track_name, outdir):
+    """Convert a generated track to the map layout consumed by Track.from_track_name."""
+    track_dir = outdir / track_name
+    track_dir.mkdir(parents=True, exist_ok=True)
+
     fig, ax = plt.subplots()
     fig.set_size_inches(20, 20)
     ax.plot(track_int[:, 0], track_int[:, 1], color="black", linewidth=3)
@@ -202,10 +208,6 @@ def convert_track(track, track_int, track_ext, track_id, outdir):
     ax.set_xlim(-180, 300)
     ax.set_ylim(-300, 300)
     plt.axis("off")
-
-    track_filepath = outdir / f"map{track_id}_map.png"
-    plt.savefig(track_filepath, dpi=80)
-    plt.close()
 
     map_width, map_height = fig.canvas.get_width_height()
     print("[info] map image size: ", map_width, map_height)
@@ -220,28 +222,34 @@ def convert_track(track, track_int, track_ext, track_id, outdir):
     map_origin_x = -origin_x_pix * 0.05
     map_origin_y = -origin_y_pix * 0.05
 
+    track_filepath = track_dir / f"{track_name}.png"
+    plt.savefig(track_filepath, dpi=80)
+    plt.close()
+
     # Convert image using cv2
     cv_img = cv2.imread(str(track_filepath), -1)
     cv_img_bw = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
-    # Save image
     cv2.imwrite(str(track_filepath), cv_img_bw)
-    cv2.imwrite(str(track_filepath.with_suffix(".pgm")), cv_img_bw)
 
     # create yaml file
-    with open(track_filepath.with_suffix(".yaml"), "w") as yaml:
-        yaml.write(f"image: map{track_id}.pgm\n")
+    yaml_filepath = track_dir / f"{track_name}.yaml"
+    with open(yaml_filepath, "w") as yaml:
+        yaml.write(f"image: {track_name}.png\n")
         yaml.write("resolution: 0.062500\n")
         yaml.write(f"origin: [{map_origin_x},{map_origin_y},0.000000]\n")
         yaml.write("negate: 0\n")
         yaml.write("occupied_thresh: 0.45\n")
-        yaml.write("free_thresh: 0.196")
+        yaml.write("free_thresh: 0.196\n")
 
     # Saving centerline as a csv
-    centerline_filepath = outdir / f"map{track_id}_centerline.csv"
+    centerline_filepath = track_dir / f"{track_name}_centerline.csv"
+    width_m = 0.05 * TRACK_WIDTH
     with open(centerline_filepath, "w") as waypoints_csv:
-        waypoints_csv.write("#x,y\n")
+        waypoints_csv.write("# x,y,w_left,w_right\n")
         for row in xy_pixels:
-            waypoints_csv.write(f"{0.05 * row[0]}, {0.05 * row[1]}\n")
+            waypoints_csv.write(
+                f"{0.05 * row[0]}, {0.05 * row[1]}, {width_m}, {width_m}\n"
+            )
 
 
 if __name__ == "__main__":

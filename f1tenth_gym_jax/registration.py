@@ -1,3 +1,5 @@
+import pathlib
+
 from .envs import F110Env
 from .envs.utils import Param
 
@@ -87,9 +89,10 @@ def make(env_id: str, **env_kwargs):
         timestep_ratio,
         max_steps,
     ) = _parse_scenario(env_id)
-    if map_name not in registered_maps:
+    available_maps = list_available_maps()
+    if map_name not in available_maps:
         raise ValueError(
-            f"{map_name} is not a registered map, choose from {registered_maps}."
+            f"{map_name} is not a registered map, choose from {available_maps}."
         )
     if max_steps is None:
         max_steps = int(90 / (0.1 * timestep_ratio))
@@ -110,6 +113,15 @@ def make(env_id: str, **env_kwargs):
     )
 
     return env
+
+
+def list_available_maps() -> list[str]:
+    """Return built-in downloadable maps plus map folders available locally."""
+    map_dir = pathlib.Path(__file__).parent.parent / "maps"
+    local_maps = []
+    if map_dir.exists():
+        local_maps = [path.name for path in map_dir.iterdir() if path.is_dir()]
+    return sorted(set(registered_maps + local_maps))
 
 
 registered_maps = [

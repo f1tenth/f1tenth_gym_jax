@@ -174,6 +174,10 @@ def make(env_id: str, **env_kwargs):
             f"{param_kwargs['map_name']} is not a registered map, choose from {available_maps}."
         )
     if param_kwargs["max_steps"] is None:
+        if param_kwargs["timestep"] <= 0:
+            raise ValueError("timestep must be positive.")
+        if param_kwargs["timestep_ratio"] <= 0:
+            raise ValueError("timestep ratio must be a positive integer.")
         param_kwargs["max_steps"] = int(
             90 / (param_kwargs["timestep"] * param_kwargs["timestep_ratio"])
         )

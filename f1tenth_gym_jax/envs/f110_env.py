@@ -2,6 +2,7 @@
 
 # other
 from functools import partial
+from numbers import Integral, Real
 
 # typing
 from typing import Dict, Tuple
@@ -41,6 +42,16 @@ from .track import Track
 from .utils import VALID_REWARDS, Param, State
 
 
+def _validate_positive_int(name: str, value: int) -> None:
+    if not isinstance(value, Integral) or value < 1:
+        raise ValueError(f"{name} must be a positive integer.")
+
+
+def _validate_positive_number(name: str, value: float) -> None:
+    if not isinstance(value, Real) or value <= 0:
+        raise ValueError(f"{name} must be positive.")
+
+
 class F110Env(MultiAgentEnv):
     """
     JAX compatible gym environment for F1TENTH
@@ -52,6 +63,19 @@ class F110Env(MultiAgentEnv):
     """
 
     def __init__(self, num_agents: int = 1, params: Param = Param(), **kwargs):
+        _validate_positive_int("number of agents", num_agents)
+        _validate_positive_int("timestep ratio", params.timestep_ratio)
+        _validate_positive_int("max steps", params.max_steps)
+        _validate_positive_int("max number of laps", params.max_num_laps)
+        _validate_positive_int("theta discretization", params.theta_dis)
+        _validate_positive_int("number of scan beams", params.num_beams)
+        if params.num_beams < 2:
+            raise ValueError("number of scan beams must be at least 2.")
+        _validate_positive_number("timestep", params.timestep)
+        _validate_positive_number("field of view", params.fov)
+        _validate_positive_number("scan epsilon", params.eps)
+        _validate_positive_number("max scan range", params.max_range)
+
         super().__init__(num_agents=num_agents)
         self.params = params
         self.reward_types = frozenset(params.reward_type.split("+"))

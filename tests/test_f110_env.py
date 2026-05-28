@@ -171,9 +171,21 @@ class TestF110Env(unittest.TestCase):
             ("model", "bicycle", "dynamics model"),
             ("longitudinal_action_type", "throttle", "longitudinal action type"),
             ("steering_action_type", "wheel", "steering action type"),
+            ("timestep", 0.0, "timestep"),
+            ("timestep_ratio", 0, "timestep ratio"),
+            ("max_steps", 0, "max steps"),
+            ("max_num_laps", 0, "max number of laps"),
+            ("theta_dis", 0, "theta discretization"),
+            ("num_beams", 1, "number of scan beams"),
+            ("fov", 0.0, "field of view"),
+            ("eps", 0.0, "scan epsilon"),
+            ("max_range", 0.0, "max scan range"),
         ]
 
         for field, value, message in invalid_params:
             with self.subTest(field=field):
                 with self.assertRaisesRegex(ValueError, message):
                     F110Env(params=Param(**{field: value}))
+
+        with self.assertRaisesRegex(ValueError, "number of agents"):
+            F110Env(num_agents=0)

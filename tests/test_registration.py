@@ -174,6 +174,22 @@ class TestRegistration(unittest.TestCase):
 
         self.assertEqual(env.params.max_steps, 42)
 
+    def test_make_rejects_invalid_param_overrides(self):
+        scenario = (
+            "Spielberg_1_noscan_nocollision_progress_"
+            "acceleration+steeringvelocity_1_v0"
+        )
+        invalid_overrides = [
+            ({"timestep": 0.0}, "timestep"),
+            ({"timestep_ratio": 0}, "timestep ratio"),
+            ({"max_steps": 0}, "max steps"),
+        ]
+
+        for kwargs, message in invalid_overrides:
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaisesRegex(ValueError, message):
+                    make(scenario, **kwargs)
+
     def test_list_available_maps_includes_configured_cache_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             cached_map = pathlib.Path(tmpdir) / "CustomCachedMap"

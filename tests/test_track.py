@@ -114,7 +114,7 @@ class TestTrack(unittest.TestCase):
                 ) as request_get:
                     request_get.return_value = Mock(status_code=404)
 
-                    with self.assertRaisesRegex(FileNotFoundError, "No maps exists"):
+                    with self.assertRaisesRegex(FileNotFoundError, "No map exists"):
                         find_track_dir("FileOnlyMap")
 
             request_get.assert_called_once()
@@ -160,6 +160,30 @@ class TestTrack(unittest.TestCase):
                     _safe_extractall(tar, target_dir)
 
             self.assertFalse((pathlib.Path(tmpdir) / "bad.txt").exists())
+
+    def test_safe_archive_extraction_rejects_links_and_special_members(self):
+        invalid_members = [
+            ("link", tarfile.SYMTYPE),
+            ("fifo", tarfile.FIFOTYPE),
+        ]
+
+        for name, member_type in invalid_members:
+            with self.subTest(name=name):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    archive_path = pathlib.Path(tmpdir) / f"bad_{name}.tar"
+                    target_dir = pathlib.Path(tmpdir) / "maps"
+                    target_dir.mkdir()
+
+                    with tarfile.open(archive_path, "w") as tar:
+                        info = tarfile.TarInfo(f"BadMap/{name}")
+                        info.type = member_type
+                        if member_type == tarfile.SYMTYPE:
+                            info.linkname = "target"
+                        tar.addfile(info)
+
+                    with tarfile.open(archive_path) as tar:
+                        with self.assertRaises(ValueError):
+                            _safe_extractall(tar, target_dir)
 
     def test_raceline(self):
         track_name = "Spielberg"

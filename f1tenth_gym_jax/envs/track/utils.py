@@ -18,6 +18,11 @@ def _safe_extractall(tar_file: tarfile.TarFile, path: pathlib.Path) -> None:
             raise ValueError(f"Unsafe path in map archive: {member.name}")
         if member.issym() or member.islnk():
             raise ValueError(f"Links are not allowed in map archives: {member.name}")
+        if not (member.isfile() or member.isdir()):
+            raise ValueError(
+                "Only regular files and directories are allowed in map archives: "
+                f"{member.name}"
+            )
     if "filter" in inspect.signature(tar_file.extractall).parameters:
         tar_file.extractall(target_dir, filter="data")
     else:
@@ -91,7 +96,7 @@ def find_track_dir(track_name: str) -> pathlib.Path:
     tracks_url = "http://api.f1tenth.org/" + track_name + ".tar.xz"
     tracks_r = requests.get(url=tracks_url, allow_redirects=True, timeout=30)
     if tracks_r.status_code == 404:
-        raise FileNotFoundError(f"No maps exists for {track_name}.")
+        raise FileNotFoundError(f"No map exists for {track_name}.")
     tracks_r.raise_for_status()
 
     print("Extracting Files for: " + track_name)

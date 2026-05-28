@@ -72,7 +72,7 @@ class TestTrack(unittest.TestCase):
         request_get.assert_called_once()
 
     def test_downloaded_track_uses_configured_map_cache(self):
-        track_name = "DownloadedTrackForTest"
+        track_name = "DownloadedTrackForTestNoTempArchive"
         response = Mock(status_code=200, content=self._track_archive(track_name))
         response.raise_for_status = Mock()
 
@@ -86,6 +86,9 @@ class TestTrack(unittest.TestCase):
 
             self.assertEqual(track_dir, pathlib.Path(tmpdir) / track_name)
             self.assertTrue((track_dir / "placeholder.txt").exists())
+            self.assertFalse(
+                (pathlib.Path(tempfile.gettempdir()) / f"{track_name}.tar.xz").exists()
+            )
 
         request_get.assert_called_once()
         response.raise_for_status.assert_called_once()

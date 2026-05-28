@@ -1,8 +1,8 @@
 import inspect
+import io
 import os
 import pathlib
 import tarfile
-import tempfile
 
 import requests
 
@@ -94,13 +94,8 @@ def find_track_dir(track_name: str) -> pathlib.Path:
         raise FileNotFoundError(f"No maps exists for {track_name}.")
     tracks_r.raise_for_status()
 
-    archive_path = pathlib.Path(tempfile.gettempdir()) / f"{track_name}.tar.xz"
-
-    with archive_path.open("wb") as f:
-        f.write(tracks_r.content)
-
     print("Extracting Files for: " + track_name)
-    with tarfile.open(archive_path) as tracks_file:
+    with tarfile.open(fileobj=io.BytesIO(tracks_r.content), mode="r:xz") as tracks_file:
         _safe_extractall(tracks_file, map_dir)
 
     track_dir = _find_existing_track_dir(track_name, (map_dir,))

@@ -13,6 +13,18 @@ from .cubic_spline import CubicSplineND, _calc_yaw_from_xy
 from .utils import find_track_dir
 
 
+def _resolve_track_file(track_dir: pathlib.Path, filename: str, description: str):
+    path = pathlib.Path(filename)
+    if path.is_absolute():
+        raise ValueError(f"{description} path must be relative: {filename}")
+
+    track_root = track_dir.resolve()
+    resolved_path = (track_root / path).resolve()
+    if resolved_path != track_root and track_root not in resolved_path.parents:
+        raise ValueError(f"{description} path escapes track directory: {filename}")
+    return resolved_path
+
+
 class Track:
     ss: np.ndarray
     xs: np.ndarray
@@ -117,10 +129,8 @@ class Track:
         oyaw = map_metadata["origin"][2]
 
         # load occupancy grid
-        map_filename = pathlib.Path(map_metadata["image"])
-        image = Image.open(track_dir / str(map_filename)).transpose(
-            Transpose.FLIP_TOP_BOTTOM
-        )
+        map_path = _resolve_track_file(track_dir, map_metadata["image"], "map image")
+        image = Image.open(map_path).transpose(Transpose.FLIP_TOP_BOTTOM)
         occ_map = np.array(image).astype(np.float32)
         occ_map[occ_map <= 128] = 0.0
         occ_map[occ_map > 128] = 255.0
@@ -174,7 +184,7 @@ class Track:
             ox=ox,
             oy=oy,
             oyaw=oyaw,
-            filepath=track_dir / str(map_filename),
+            filepath=map_path,
         )
 
     @staticmethod

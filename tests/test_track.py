@@ -103,6 +103,30 @@ class TestTrack(unittest.TestCase):
         self.assertEqual(track.filepath, track_dir / "Space Map.png")
         self.assertGreater(track.centerline.s[-1], 0.0)
 
+    def test_map_image_path_must_stay_inside_track_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            map_root = pathlib.Path(tmpdir)
+            track_dir = self._write_minimal_map(map_root, "UnsafeMap")
+            Image.fromarray(np.full((16, 16), 255, dtype=np.uint8)).save(
+                map_root / "outside.png"
+            )
+            with (track_dir / "UnsafeMap.yaml").open("w") as yaml_file:
+                yaml.safe_dump(
+                    {
+                        "image": "../outside.png",
+                        "resolution": 0.1,
+                        "origin": [0.0, 0.0, 0.0],
+                        "negate": 0,
+                        "occupied_thresh": 0.45,
+                        "free_thresh": 0.196,
+                    },
+                    yaml_file,
+                )
+
+            with patch.dict(os.environ, {"F1TENTH_GYM_JAX_MAP_DIR": tmpdir}):
+                with self.assertRaisesRegex(ValueError, "map image path escapes"):
+                    Track.from_track_name("UnsafeMap")
+
     def test_safe_archive_extraction_rejects_path_traversal(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             archive_path = pathlib.Path(tmpdir) / "bad_map.tar"

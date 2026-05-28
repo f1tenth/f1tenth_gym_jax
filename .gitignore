@@ -1,5 +1,7 @@
 **/wandb/
 f1tenth_gym_jax_rollout.gif
+f1tenth_gym_jax_rollout.html
+blah/
 maps/RandomTrack*/
 build/
 __pycache__

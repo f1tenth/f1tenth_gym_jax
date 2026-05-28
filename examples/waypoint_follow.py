@@ -3,13 +3,14 @@ import os
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 import argparse
+import pathlib
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 from f1tenth_gym_jax import make
-from f1tenth_gym_jax.envs.rendering.renderer import TrajRenderer
+from f1tenth_gym_jax.envs.rendering import WebRenderer
 from f1tenth_gym_jax.envs.utils import unbatchify
 
 
@@ -47,6 +48,7 @@ def run_waypoint_follow(
     num_envs: int = 10,
     num_steps: int = 1000,
     render: bool = True,
+    render_output: pathlib.Path = pathlib.Path("f1tenth_gym_jax_rollout.html"),
 ):
     _validate_positive_int("num_agents", num_agents)
     _validate_positive_int("num_envs", num_envs)
@@ -91,8 +93,10 @@ def run_waypoint_follow(
     )
 
     if render:
-        player = TrajRenderer(env)
-        player.render(np.array(all_runner_state[0].cartesian_states))
+        WebRenderer(env).render(
+            np.array(all_runner_state[0].cartesian_states),
+            output_path=render_output,
+        )
     return final_runner, all_runner_state
 
 
@@ -104,6 +108,12 @@ def main():
     parser.add_argument(
         "--no-render", action="store_true", help="Skip trajectory rendering."
     )
+    parser.add_argument(
+        "--render-output",
+        type=pathlib.Path,
+        default=pathlib.Path("f1tenth_gym_jax_rollout.html"),
+        help="Output HTML dashboard path.",
+    )
     args = parser.parse_args()
 
     run_waypoint_follow(
@@ -111,6 +121,7 @@ def main():
         num_envs=args.num_envs,
         num_steps=args.steps,
         render=not args.no_render,
+        render_output=args.render_output,
     )
 
 

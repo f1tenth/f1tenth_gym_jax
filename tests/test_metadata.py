@@ -40,6 +40,21 @@ class TestMetadata(unittest.TestCase):
             )
         )
 
+    def test_qt_rendering_dependencies_are_removed(self):
+        repo_root = pathlib.Path(__file__).parent.parent
+        metadata = tomllib.loads((repo_root / "pyproject.toml").read_text())
+        dependency_text = "\n".join(
+            metadata["project"]["dependencies"]
+            + metadata["project"].get("optional-dependencies", {}).get("examples", [])
+            + metadata["dependency-groups"]["dev"]
+        ).lower()
+        lock_text = (repo_root / "uv.lock").read_text().lower()
+
+        for dependency in ("pyqt", "pyqtgraph", "pyopengl"):
+            with self.subTest(dependency=dependency):
+                self.assertNotIn(dependency, dependency_text)
+                self.assertNotIn(f'name = "{dependency}', lock_text)
+
     def test_docker_context_excludes_local_artifacts(self):
         repo_root = pathlib.Path(__file__).parent.parent
         dockerfile = (repo_root / "Dockerfile").read_text()
@@ -57,8 +72,10 @@ class TestMetadata(unittest.TestCase):
             "wandb/",
             "**/__pycache__/",
             ".pytest_cache/",
+            "blah/",
             "build/",
             "dist/",
+            "f1tenth_gym_jax_rollout.html",
         ):
             with self.subTest(pattern=pattern):
                 self.assertIn(pattern, patterns)

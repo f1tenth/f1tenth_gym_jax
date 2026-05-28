@@ -1,4 +1,6 @@
-import os
+import json
+import pathlib
+import tempfile
 import unittest
 
 import jax
@@ -6,38 +8,22 @@ import jax.numpy as jnp
 import numpy as np
 
 from f1tenth_gym_jax import make
+from f1tenth_gym_jax.envs.rendering import TrajRenderer, WebRenderer
+
+
+def _payload_from_dashboard(path: pathlib.Path) -> dict:
+    html = path.read_text()
+    marker = '<script id="rollout-data" type="application/json">'
+    start = html.index(marker) + len(marker)
+    end = html.index("</script>", start)
+    return json.loads(html[start:end])
 
 
 class TestRenderer(unittest.TestCase):
     def _make_renderer_inputs(self, max_steps=5):
-        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-        try:
-            from f1tenth_gym_jax.envs.rendering.renderer import TrajRenderer
-        except Exception as exc:
-            self.skipTest(f"Renderer dependencies are unavailable: {exc}")
-
         env = make(
             f"Spielberg_1_noscan_nocollision_progress_acceleration+steeringvelocity_1_{max_steps}_v0"
         )
-        return env, TrajRenderer
-
-    def test_rgb_array_render_smoke(self):
-        env, TrajRenderer = self._make_renderer_inputs()
-
-        renderer = TrajRenderer(env, render_mode="rgb_array")
-        try:
-            _, state = env.reset(jax.random.key(0))
-            trajectory = np.asarray(state.cartesian_states)[None, None, :, :]
-            frame = renderer.render(trajectory)
-            self.assertIsInstance(frame, np.ndarray)
-            self.assertEqual(frame.ndim, 3)
-            self.assertEqual(frame.shape[2], 3)
-        finally:
-            renderer.close()
-
-    def test_rgb_array_render_reuses_vehicle_items(self):
-        env, TrajRenderer = self._make_renderer_inputs(max_steps=2)
         _, state = env.reset(jax.random.key(0))
         action = {"agent_0": jnp.array([0.0, 1.0])}
         _, next_state, _, _, _ = env.step(jax.random.key(1), state, action)
@@ -47,36 +33,79 @@ class TestRenderer(unittest.TestCase):
                 np.asarray(next_state.cartesian_states),
             ]
         )[:, None, :, :]
+        return env, trajectory
 
-        renderer = TrajRenderer(env, render_mode="rgb_array")
-        try:
-            self.assertIsInstance(renderer.render(trajectory), np.ndarray)
-            items_after_first = len(renderer.canvas.getPlotItem().listDataItems())
+    def test_traj_renderer_aliases_web_renderer(self):
+        self.assertIs(TrajRenderer, WebRenderer)
 
-            self.assertIsInstance(renderer.render(trajectory), np.ndarray)
-            items_after_second = len(renderer.canvas.getPlotItem().listDataItems())
+    def test_web_dashboard_render_smoke(self):
+        env, trajectory = self._make_renderer_inputs()
 
-            self.assertEqual(items_after_first, items_after_second)
-            self.assertIsNone(renderer.render(trajectory))
-        finally:
-            renderer.close()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = pathlib.Path(tmpdir) / "rollout.html"
+            rendered = WebRenderer(env).render(trajectory, output_path=output)
 
-    def test_play_pause_keeps_timer_state_in_sync(self):
-        env, TrajRenderer = self._make_renderer_inputs()
+            self.assertEqual(rendered, output)
+            self.assertTrue(output.exists())
+            html = output.read_text()
+            self.assertIn("Batched Rollout Overview", html)
+            self.assertIn("Timestep scrubber", html)
+            self.assertIn("Speed multiplier", html)
+            self.assertIn("actual real time", html)
 
-        renderer = TrajRenderer(env, render_mode="rgb_array")
-        try:
-            self.assertTrue(renderer.playing)
-            self.assertTrue(renderer.t.isActive())
+            payload = _payload_from_dashboard(output)
+            self.assertEqual(payload["summary"]["rollouts"], 1)
+            self.assertEqual(payload["summary"]["steps"], 2)
+            self.assertEqual(payload["summary"]["agents"], 1)
+            self.assertEqual(payload["env"]["agents"], ["agent_0"])
+            self.assertEqual(
+                len(payload["track"]["centerline"]), len(env.track.centerline.xs)
+            )
+            self.assertTrue(
+                payload["map"]["image"].startswith("data:image/png;base64,")
+            )
 
-            renderer.play_pause()
+    def test_web_dashboard_preserves_batched_rollouts(self):
+        env, trajectory = self._make_renderer_inputs()
+        batched_trajectory = np.repeat(trajectory, 2, axis=1)
+        batched_trajectory[:, 1, :, 0] += 1.0
 
-            self.assertFalse(renderer.playing)
-            self.assertFalse(renderer.t.isActive())
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = pathlib.Path(tmpdir) / "batched.html"
+            WebRenderer(env).render(batched_trajectory, output_path=output)
 
-            renderer.play_pause()
+            payload = _payload_from_dashboard(output)
+            self.assertEqual(payload["summary"]["rollouts"], 2)
+            self.assertEqual(len(payload["trajectory"]), 2)
+            self.assertEqual(len(payload["rolloutStats"]), 2)
 
-            self.assertTrue(renderer.playing)
-            self.assertTrue(renderer.t.isActive())
-        finally:
-            renderer.close()
+    def test_web_dashboard_accepts_batch_major_layout(self):
+        env, trajectory = self._make_renderer_inputs()
+        batch_major = np.transpose(trajectory, (1, 0, 2, 3))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = pathlib.Path(tmpdir) / "batch-major.html"
+            WebRenderer(env, trajectory_layout="batch_major").render(
+                batch_major,
+                output_path=output,
+            )
+
+            payload = _payload_from_dashboard(output)
+            self.assertEqual(payload["summary"]["rollouts"], 1)
+            self.assertEqual(payload["summary"]["steps"], 2)
+
+    def test_rgb_array_mode_is_removed(self):
+        env, _ = self._make_renderer_inputs()
+
+        with self.assertRaisesRegex(ValueError, "rgb_array rendering was removed"):
+            WebRenderer(env, render_mode="rgb_array")
+
+    def test_play_pause_tracks_default_playback_state(self):
+        env, _ = self._make_renderer_inputs()
+        renderer = WebRenderer(env)
+
+        self.assertTrue(renderer.playing)
+        renderer.play_pause()
+        self.assertFalse(renderer.playing)
+        renderer.play_pause()
+        self.assertTrue(renderer.playing)

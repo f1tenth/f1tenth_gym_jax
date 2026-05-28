@@ -4,6 +4,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".99"
 
 import argparse
+import pathlib
 from functools import partial
 from typing import Callable
 
@@ -18,7 +19,7 @@ from f1tenth_gym_jax import make
 from f1tenth_gym_jax.envs import F110Env
 from f1tenth_gym_jax.envs.dynamic_models import vehicle_dynamics_st_switching
 from f1tenth_gym_jax.envs.integrator import integrate_rk4
-from f1tenth_gym_jax.envs.rendering.renderer import TrajRenderer
+from f1tenth_gym_jax.envs.rendering import WebRenderer
 from f1tenth_gym_jax.envs.track.cubic_spline import nearest_point_on_trajectory_jax
 from f1tenth_gym_jax.envs.utils import batchify, unbatchify
 
@@ -226,6 +227,7 @@ def run_mppi(
     config: MPPIConfig = MPPIConfig(),
     plot: bool = True,
     render: bool = True,
+    render_output: pathlib.Path = pathlib.Path("f1tenth_gym_jax_rollout.html"),
 ):
     _validate_positive_int("num_agents", num_agents)
     _validate_positive_int("num_envs", num_envs)
@@ -339,8 +341,10 @@ def run_mppi(
         return final_runner, all_runner_state, all_reward, all_done
 
     if not plot:
-        player = TrajRenderer(env)
-        player.render(np.array(all_runner_state[0].cartesian_states))
+        WebRenderer(env).render(
+            np.array(all_runner_state[0].cartesian_states),
+            output_path=render_output,
+        )
         return final_runner, all_runner_state, all_reward, all_done
 
     fig, ax = plt.subplots(3, 1, sharex=True, figsize=(10, 10))
@@ -481,8 +485,10 @@ def run_mppi(
     plt.show()
 
     if render:
-        player = TrajRenderer(env)
-        player.render(np.array(all_runner_state[0].cartesian_states))
+        WebRenderer(env).render(
+            np.array(all_runner_state[0].cartesian_states),
+            output_path=render_output,
+        )
 
     return final_runner, all_runner_state, all_reward, all_done
 
@@ -501,6 +507,12 @@ def main():
     parser.add_argument(
         "--no-render", action="store_true", help="Skip trajectory rendering."
     )
+    parser.add_argument(
+        "--render-output",
+        type=pathlib.Path,
+        default=pathlib.Path("f1tenth_gym_jax_rollout.html"),
+        help="Output HTML dashboard path.",
+    )
     args = parser.parse_args()
 
     config = MPPIConfig(n_samples=args.num_samples, n_steps=args.horizon)
@@ -511,6 +523,7 @@ def main():
         config=config,
         plot=not args.no_plots,
         render=not args.no_render,
+        render_output=args.render_output,
     )
 
 

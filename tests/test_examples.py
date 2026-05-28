@@ -188,9 +188,9 @@ class TestExamples(unittest.TestCase):
         environment_examples = {
             "eval_ppo_example.py",
             "mppi_example.py",
+            "render_dashboard.py",
             "run_in_empty_track.py",
             "train_ppo_example.py",
-            "video_recording.py",
             "waypoint_follow.py",
         }
 
@@ -356,16 +356,17 @@ class TestExamples(unittest.TestCase):
                         render=False,
                     )
 
-    def test_video_recording_writes_requested_gif(self):
-        video_recording = _load_example_module("video_recording")
+    def test_render_dashboard_writes_requested_html(self):
+        render_dashboard = _load_example_module("render_dashboard")
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            output = pathlib.Path(tmpdir) / "rollout.gif"
-            frames = video_recording.record_gif(num_steps=1, output=output)
+            output = pathlib.Path(tmpdir) / "rollout.html"
+            rendered = render_dashboard.save_dashboard(num_steps=1, output=output)
 
-            self.assertEqual(frames, 1)
+            self.assertEqual(rendered, output)
             self.assertTrue(output.exists())
             self.assertGreater(output.stat().st_size, 0)
+            self.assertIn("Timestep scrubber", output.read_text())
 
     def test_random_trackgen_uses_yaml_resolution_for_centerline_scale(self):
         random_trackgen = _load_example_module("random_trackgen")

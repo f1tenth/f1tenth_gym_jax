@@ -20,7 +20,7 @@ Install optional dependencies for specific workflows:
 
 .. code:: bash
 
-    uv sync --extra examples  # plotting, video, and track generation examples
+    uv sync --extra examples  # plotting, web dashboard, and track generation examples
     uv sync --extra rl        # PPO training/evaluation dependencies
     uv sync --extra docs      # Sphinx documentation build
     uv sync --extra cuda      # JAX CUDA 12 support
@@ -42,8 +42,9 @@ Plain ``pip install -e .`` does not read ``[tool.uv.sources]`` from
 Docker
 ------
 
-The default Docker image installs the standard dependency set and uses
-offscreen Qt rendering, matching the headless CI smoke tests.
+The default Docker image installs the standard dependency set. Rollout
+visualization is generated as a standalone HTML dashboard that can be opened in
+any browser.
 
 .. code:: bash
 

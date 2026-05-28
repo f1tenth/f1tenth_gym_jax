@@ -3,16 +3,21 @@ import os
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 import argparse
+import pathlib
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 from f1tenth_gym_jax import make
-from f1tenth_gym_jax.envs.rendering.renderer import TrajRenderer
+from f1tenth_gym_jax.envs.rendering import WebRenderer
 
 
-def rollout(num_steps: int | None = None, render: bool = True):
+def rollout(
+    num_steps: int | None = None,
+    render: bool = True,
+    render_output: pathlib.Path = pathlib.Path("f1tenth_gym_jax_rollout.html"),
+):
     """
     Run a simple collision-free rollout with the current JAX environment API.
     """
@@ -42,8 +47,7 @@ def rollout(num_steps: int | None = None, render: bool = True):
 
     trajectory = np.asarray(trajectory)[:, None, :, :]
     if render:
-        player = TrajRenderer(env)
-        player.render(trajectory)
+        WebRenderer(env).render(trajectory, output_path=render_output)
     return trajectory
 
 
@@ -55,9 +59,19 @@ def main():
     parser.add_argument(
         "--no-render", action="store_true", help="Skip trajectory rendering."
     )
+    parser.add_argument(
+        "--render-output",
+        type=pathlib.Path,
+        default=pathlib.Path("f1tenth_gym_jax_rollout.html"),
+        help="Output HTML dashboard path.",
+    )
     args = parser.parse_args()
 
-    rollout(num_steps=args.steps, render=not args.no_render)
+    rollout(
+        num_steps=args.steps,
+        render=not args.no_render,
+        render_output=args.render_output,
+    )
 
 
 if __name__ == "__main__":

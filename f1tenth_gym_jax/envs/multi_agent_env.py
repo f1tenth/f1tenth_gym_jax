@@ -1,10 +1,7 @@
-"""
-Abstract base class for multi agent gym environments with JAX
-Based on the Gymnax and PettingZoo APIs
+"""Abstract base class for multi-agent JAX environments.
 
-From JaxMARL: https://github.com/FLAIROx/JaxMARL/blob/main/jaxmarl/environments/multi_agent_env.py
-
-Added here since only using space and env abstract classes but not as a full dep
+Derived from JaxMARL:
+https://github.com/FLAIROx/JaxMARL/blob/main/jaxmarl/environments/multi_agent_env.py
 """
 
 from functools import partial
@@ -22,7 +19,7 @@ class State:
 
 
 class MultiAgentEnv(object):
-    """Jittable abstract base class for all jaxmarl Environments."""
+    """Jittable abstract base class for multi-agent environments."""
 
     def __init__(
         self,

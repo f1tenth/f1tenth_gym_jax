@@ -1,10 +1,4 @@
-"""
-JAX-jittable f1tenth_gym_jax environment
-
-Based on JaxMARL api which follows PettingZoo/Gymnax
-
-Author: Hongrui Zheng
-"""
+"""JAX-compatible f1tenth_gym_jax environment."""
 
 # other
 from functools import partial
@@ -77,10 +71,9 @@ class F110Env(MultiAgentEnv):
         elif params.integrator == "euler":
             self.integrator_func = integrate_euler
         else:
-            raise (
-                ValueError(
-                    f"Chosen integrator {params.integrator} is invalid. Choose either 'rk4' or 'euler'."
-                )
+            raise ValueError(
+                f"Chosen integrator {params.integrator} is invalid. "
+                "Choose either 'rk4' or 'euler'."
             )
 
         if params.model == "st":
@@ -96,10 +89,9 @@ class F110Env(MultiAgentEnv):
             self.state_size = 5
             self.cartesian_obs_indices = (2, 3)
         else:
-            raise (
-                ValueError(
-                    f"Chosen dynamics model {params.model} is invalid. Choose either 'st', 'st_smooth', or 'ks'."
-                )
+            raise ValueError(
+                f"Chosen dynamics model {params.model} is invalid. "
+                "Choose either 'st', 'st_smooth', or 'ks'."
             )
 
         if params.steering_action_type == "steeringvelocity":

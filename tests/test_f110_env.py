@@ -5,6 +5,7 @@ import jax.numpy as jnp
 
 from f1tenth_gym_jax import make
 from f1tenth_gym_jax.envs.f110_env import F110Env
+from f1tenth_gym_jax.envs.utils import Param
 
 BASE_ENV_ID = (
     "Spielberg_2_noscan_nocollision_progress_acceleration+steeringvelocity_1_5_v0"
@@ -163,3 +164,16 @@ class TestF110Env(unittest.TestCase):
                 "Spielberg_1_noscan_nocollision_progress_acceleration+steeringvelocity_1_5_v0",
                 reward_type="notprogress",
             )
+
+    def test_invalid_constructor_params_are_rejected(self):
+        invalid_params = [
+            ("integrator", "verlet", "integrator"),
+            ("model", "bicycle", "dynamics model"),
+            ("longitudinal_action_type", "throttle", "longitudinal action type"),
+            ("steering_action_type", "wheel", "steering action type"),
+        ]
+
+        for field, value, message in invalid_params:
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(ValueError, message):
+                    F110Env(params=Param(**{field: value}))

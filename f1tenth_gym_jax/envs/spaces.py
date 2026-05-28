@@ -1,9 +1,7 @@
-"""
-Built off Gymnax spaces.py, this module contains jittable classes for action and observation spaces.
+"""JAX-compatible action and observation space classes.
 
-From JaxMARL: https://github.com/FLAIROx/JaxMARL/blob/main/jaxmarl/environments/spaces.py
-
-Added here since only using space and env abstract classes but not as a full dep
+Derived from JaxMARL:
+https://github.com/FLAIROx/JaxMARL/blob/main/jaxmarl/environments/spaces.py
 """
 
 from collections import OrderedDict
@@ -15,9 +13,7 @@ import jax.numpy as jnp
 
 
 class Space(object):
-    """
-    Minimal jittable class for abstract jaxmarl space.
-    """
+    """Minimal abstract base class for JAX-compatible spaces."""
 
     def sample(self, rng: chex.PRNGKey) -> chex.Array:
         raise NotImplementedError
@@ -27,9 +23,7 @@ class Space(object):
 
 
 class Discrete(Space):
-    """
-    Minimal jittable class for discrete gymnax spaces.
-    """
+    """Minimal JAX-compatible discrete space."""
 
     def __init__(self, num_categories: int, dtype=jnp.int32):
         if num_categories < 1:
@@ -56,9 +50,7 @@ class Discrete(Space):
 
 
 class MultiDiscrete(Space):
-    """
-    Minimal jittable class for multi-discrete gymnax spaces.
-    """
+    """Minimal JAX-compatible multi-discrete space."""
 
     def __init__(self, num_categories: Sequence[int], dtype=jnp.int32):
         """Num categories is the number of cat actions for each dim, [2,2,2]=2 actions x 3 dim"""
@@ -90,9 +82,7 @@ class MultiDiscrete(Space):
 
 
 class Box(Space):
-    """
-    Minimal jittable class for array-shaped gymnax spaces.
-    """
+    """Minimal JAX-compatible array-shaped box space."""
 
     def __init__(
         self,
@@ -147,7 +137,7 @@ class Box(Space):
 
 
 class Dict(Space):
-    """Minimal jittable class for dictionary of simpler jittable spaces."""
+    """Minimal JAX-compatible dictionary of simpler spaces."""
 
     def __init__(self, spaces: dict):
         self.spaces = spaces
@@ -176,7 +166,7 @@ class Dict(Space):
 
 
 class Tuple(Space):
-    """Minimal jittable class for tuple (product) of jittable spaces."""
+    """Minimal JAX-compatible tuple product of simpler spaces."""
 
     def __init__(self, spaces: Union[tuple, list]):
         self.spaces = spaces

@@ -199,6 +199,26 @@ class TestExamples(unittest.TestCase):
             atol=1e-5,
         )
 
+    def test_mppi_example_runs_without_plots_or_rendering(self):
+        mppi_example = _load_example_module("mppi_example")
+        config = mppi_example.MPPIConfig(n_samples=2, n_steps=2)
+
+        _, all_runner_state, all_reward, all_done = mppi_example.run_mppi(
+            num_agents=1,
+            num_envs=1,
+            num_steps=1,
+            config=config,
+            plot=False,
+            render=False,
+        )
+        trajectory = np.asarray(all_runner_state[0].cartesian_states)
+
+        self.assertEqual(trajectory.shape, (1, 1, 1, 7))
+        self.assertEqual(np.asarray(all_reward).shape, (1, 1, 1))
+        self.assertEqual(np.asarray(all_done).shape, (1, 1, 1))
+        self.assertTrue(np.isfinite(trajectory).all())
+        self.assertTrue(np.isfinite(np.asarray(all_reward)).all())
+
     def test_video_recording_writes_requested_gif(self):
         video_recording = _load_example_module("video_recording")
 

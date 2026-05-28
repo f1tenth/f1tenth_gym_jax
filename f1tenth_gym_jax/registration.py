@@ -3,68 +3,118 @@ import pathlib
 from .envs import F110Env
 from .envs.utils import Param
 
+_VALID_SCAN_MODES = {"scan", "noscan"}
+_VALID_COLLISION_MODES = {"collision", "nocollision"}
+_VALID_LONGITUDINAL_CONTROLS = {"acceleration", "velocity"}
+_VALID_STEERING_CONTROLS = {"steeringangle", "steeringvelocity"}
+_VALID_REWARDS = {"time", "progress", "alive"}
+
 
 # scenario patterns
-# {map_name}_{num_agent}_{produce_scan}_{collision_on}_{reward_type}_{control_type(optional)}_{tsratio}_{num_steps}_v0
-# {str}_{int}_{"scan"/"noscan"}_{"collision"/"nocollision"}_{"time+/progress+/"}_{accleration+steeringvel/}_{int}_{int}_v0
+# {map}_{num_agents}_{scan|noscan}_{collision|nocollision}_{rewards}_{longitudinal+steering}_{timestep_ratio}_{max_steps}_v0
 def _parse_scenario(scenario: str):
-    scenario = scenario.split("_")
-    map_name = scenario[0]
+    scenario_parts = scenario.split("_")
+    if len(scenario_parts) < 9:
+        raise ValueError(
+            "Environment ID must follow "
+            "{map}_{num_agents}_{scan|noscan}_{collision|nocollision}_{rewards}_"
+            "{longitudinal+steering}_{timestep_ratio}_{max_steps}_v0."
+        )
+    if scenario_parts[-1] != "v0":
+        raise ValueError(f"Invalid environment version: {scenario_parts[-1]}.")
+
+    map_name = "_".join(scenario_parts[:-8])
+    if not map_name:
+        raise ValueError("Environment ID is missing a map name.")
+
+    (
+        num_agents_raw,
+        scan_mode,
+        collision_mode,
+        reward_type,
+        control_type,
+        timestep_ratio_raw,
+        max_steps_raw,
+    ) = scenario_parts[-8:-1]
+
     try:
-        num_agents = int(scenario[1])
-        index_bump = 0
-    except ValueError:
-        map_name += "_" + scenario[1]
-        num_agents = int(scenario[2])
-        index_bump = 1
+        num_agents = int(num_agents_raw)
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid number of agents: {num_agents_raw}, must be an integer."
+        ) from exc
+
     # check whether num_agents is valid
     if num_agents < 1:
         raise ValueError(f"Invalid number of agents: {num_agents}")
-    produce_scan = scenario[2 + index_bump] == "scan"
-    collision_on = scenario[3 + index_bump] == "collision"
-    reward_type = scenario[4 + index_bump]
-    control_type = scenario[5 + index_bump]
-    long_type, steer_type = control_type.split("+")
-    assert all(
-        c in ["acceleration", "velocity"] for c in [long_type]
-    ), f"Invalid longitudinal control type: {long_type}, must be from ['acceleration', 'velocity']"
-    assert all(
-        c in ["steeringangle", "steeringvelocity"] for c in [steer_type]
-    ), f"Invalid steering control type: {steer_type}, must be from ['steeringangle', 'steeringvelocity']"
+
+    if scan_mode not in _VALID_SCAN_MODES:
+        raise ValueError(
+            f"Invalid scan mode: {scan_mode}, must be from {sorted(_VALID_SCAN_MODES)}."
+        )
+    produce_scan = scan_mode == "scan"
+
+    if collision_mode not in _VALID_COLLISION_MODES:
+        raise ValueError(
+            f"Invalid collision mode: {collision_mode}, "
+            f"must be from {sorted(_VALID_COLLISION_MODES)}."
+        )
+    collision_on = collision_mode == "collision"
+
+    controls = control_type.split("+")
+    if len(controls) != 2:
+        raise ValueError(
+            f"Invalid control type: {control_type}, expected longitudinal+steering."
+        )
+    long_type, steer_type = controls
+    if long_type not in _VALID_LONGITUDINAL_CONTROLS:
+        raise ValueError(
+            f"Invalid longitudinal control type: {long_type}, "
+            f"must be from {sorted(_VALID_LONGITUDINAL_CONTROLS)}."
+        )
+    if steer_type not in _VALID_STEERING_CONTROLS:
+        raise ValueError(
+            f"Invalid steering control type: {steer_type}, "
+            f"must be from {sorted(_VALID_STEERING_CONTROLS)}."
+        )
     control_type = [long_type, steer_type]
 
     all_reward_function = set(reward_type.split("+"))
-    assert all(
-        r in ["time", "progress", "alive"] for r in all_reward_function
-    ), f"Invalid reward type list: {all_reward_function}, must be from ['time', 'progress', 'alive']"
+    if not all_reward_function or not all_reward_function.issubset(_VALID_REWARDS):
+        raise ValueError(
+            f"Invalid reward type list: {all_reward_function}, "
+            f"must be from {sorted(_VALID_REWARDS)}."
+        )
 
-    timestep_ratio = scenario[6 + index_bump]
+    timestep_ratio = timestep_ratio_raw
     if timestep_ratio == "v0":
         timestep_ratio = 1
     else:
         try:
             timestep_ratio = int(timestep_ratio)
-            assert (
-                timestep_ratio > 0
-            ), f"Invalid timestep ratio: {timestep_ratio}, must be a positive integer."
         except ValueError as exc:
             raise ValueError(
                 f"Invalid timestep ratio: {timestep_ratio}, must be an integer."
             ) from exc
+        if timestep_ratio <= 0:
+            raise ValueError(
+                f"Invalid timestep ratio: {timestep_ratio}, must be a positive integer."
+            )
 
-    max_steps = scenario[7 + index_bump]
+    max_steps = max_steps_raw
     if max_steps == "v0":
         max_steps = None
     else:
         try:
             max_steps = int(max_steps)
-            assert (
-                max_steps > 0
-            ), f"Invalid max steps: {max_steps}, must be a positive integer."
         except ValueError as exc:
             raise ValueError(
                 f"Invalid max steps: {max_steps}, must be an integer."
             ) from exc
+        if max_steps <= 0:
+            raise ValueError(
+                f"Invalid max steps: {max_steps}, must be a positive integer."
+            )
 
     return (
         map_name,
